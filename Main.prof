@@ -1,0 +1,32 @@
+	Thu Aug 03 16:32 2017 Time and Allocation Profiling Report  (Final)
+
+	   Main.exe +RTS -p -RTS
+
+	total time  =        0.00 secs   (1 ticks @ 1000 us, 1 processor)
+	total alloc =     108,056 bytes  (excludes profiling overheads)
+
+COST CENTRE MODULE                    %time %alloc
+
+CAF         GHC.IO.Encoding.CodePage  100.0    0.2
+main        Main                        0.0   55.3
+CAF         Main                        0.0    2.1
+CAF         GHC.IO.Exception            0.0    1.1
+CAF         GHC.Err                     0.0    3.9
+CAF         GHC.Exception               0.0    4.2
+CAF         GHC.IO.Handle.FD            0.0   32.0
+
+
+                                                        individual      inherited
+COST CENTRE MODULE                   no.     entries  %time %alloc   %time %alloc
+
+MAIN        MAIN                      39          0    0.0    0.3   100.0  100.0
+ CAF        GHC.IO.Encoding.CodePage  63          0  100.0    0.2   100.0    0.2
+ CAF        GHC.Stack.CCS             61          0    0.0    0.4     0.0    0.4
+ CAF        GHC.IO.Encoding           60          0    0.0    0.3     0.0    0.3
+ CAF        GHC.Conc.Sync             59          0    0.0    0.2     0.0    0.2
+ CAF        GHC.IO.Handle.FD          53          0    0.0   32.0     0.0   32.0
+ CAF        GHC.Exception             50          0    0.0    4.2     0.0    4.2
+ CAF        GHC.Err                   49          0    0.0    3.9     0.0    3.9
+ CAF        GHC.IO.Exception          48          0    0.0    1.1     0.0    1.1
+ CAF        Main                      46          0    0.0    2.1     0.0   57.4
+  main      Main                      78          1    0.0   55.3     0.0   55.3
