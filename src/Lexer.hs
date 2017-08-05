@@ -2,30 +2,49 @@ module Lexer where
 
 import Control.Applicative
 import Data.Char
+import Numeric
 import Test.HUnit
 
 import Equation
+import Rational
 
 --------------------------------------------------------------------------------
 
 lexEqn :: String -> Maybe Equation
 lexEqn string = case lexExp string of
   (tokens @ (_ : _), '=' : string') -> case lexExp string' of
-    (tokens' @ (_ : _), "") -> Just (Eqn tokens tokens')
+    (tokens' @ (_ : _), []) -> Just (Eqn tokens tokens')
     _ -> Nothing
   _ -> Nothing
 
 lexExp :: String -> ([Token], String)
-lexExp string' @ (char : string)
-  | char == '=' = ([], string')
-  | isSpace char = lexExp string
-  | otherwise = case tokenMatch string' of
-    Just (token, string'') -> recurseLex token string''
-    _ -> recurseLex (Var char) string
+lexExp string @ (char : string')
+  | char == '=' = ([], string)
+  | char == '(' = recurseLex Opn string'
+  | char == ')' = recurseLex Cls string'
+  | isSpace char = lexExp string'
+  | isDigit char = case constantMatch string of
+    Just (constant, string'') -> recurseLex (Con constant) string''
+    _ -> recurseLex Not string'
+  | otherwise = case operatorMatch string of
+    Just (operator, string'') -> recurseLex (Opr operator) string''
+    _ -> recurseLex (if isAlpha char then Var char else Not) string'
 lexExp _ = ([], [])
 
-tokenMatch :: String -> Maybe (Token, String)
-tokenMatch string = foldl match empty lookupTable
+recurseLex :: Token -> String -> ([Token], String)
+recurseLex token string = (token : tokens, string')
+  where
+    (tokens, string') = lexExp string
+
+constantMatch :: String -> Maybe (Constant, String)
+constantMatch string = case reads string :: [(Int, String)] of
+  [(int, string')] -> Just (Z int, string')
+  _ -> case readFloat string :: [(Rational, String)] of
+    [(rational, string')] -> Just (toQ rational, string')
+    _ -> Nothing
+
+operatorMatch :: String -> Maybe (Operator, String)
+operatorMatch string = foldl match empty lookupTable
   where
     match matches (token, operator)
       = matches <|> (,) token <$> patternMatch string operator
@@ -36,25 +55,18 @@ patternMatch (char : string) (char' : pattern)
 patternMatch string [] = Just string
 patternMatch _ _ = Nothing
 
-recurseLex :: Token -> String -> ([Token], String)
-recurseLex token string = (token : tokens, string')
-  where
-    (tokens, string') = lexExp string
-
 --------------------------------------------------------------------------------
 
 actual :: String
-actual = "f(x) / log3(4.5) = (ax^2 + b*x - (1+i)c) / (6.7 + 8.9i)"
+actual = "f(x) / log3(4*5) = (ax^2 - (b*x + c1)) / (6.7 ^ -8.9)"
 
 expected :: Equation
-expected = Eqn [
-  Var 'f', Opn, Var 'x', Cls, Opr Div, Opr Log,
-  Var '3', Opn, Var '4', Var '.', Var '5', Cls
-  ] [
-  Opn, Var 'a', Var 'x', Opr Exp, Var '2', Opr Add, Var 'b', Opr Mul, Var 'x',
-  Opr Sub, Opn, Var '1', Opr Add, Var 'i', Cls, Var 'c', Cls, Opr Div, Opn,
-  Var '6', Var '.', Var '7', Opr Add, Var '8', Var '.', Var '9', Var 'i', Cls
-  ]
+expected = Eqn
+  [ Var 'f', Opn, Var 'x', Cls, Opr Div, Opr Log
+  , Con (Z 3), Opn, Con (Z 4), Opr Mul, Con (Z 5), Cls ]
+  [ Opn, Var 'a', Var 'x', Opr Exp, Con (Z 2), Opr Sub, Opn
+  , Var 'b', Opr Mul, Var 'x', Opr Add, Var 'c', Con (Z 1), Cls, Cls
+  , Opr Div, Opn, Con (Q 67 10), Opr Exp, Opr Sub, Con (Q 89 10), Cls ]
 
 tests :: Test
 tests = TestList
