@@ -5,7 +5,16 @@ import Data.Function
 
 --------------------------------------------------------------------------------
 
-data Equation = Eqn [Token] [Token] -- Equation
+type Input = String
+
+type Queue = [Token]
+type Stack = [Token]
+type Tokens = [Token]
+
+type LHS = [Token]
+type RHS = [Token]
+
+data Equation = Eqn LHS RHS -- Equation
               deriving (Eq, Show)
 
 data Token = Con Constant -- Constant
@@ -34,8 +43,17 @@ data Operator = Add -- Addition (+)
 operators :: [Operator]
 operators = [Add, Sub, Mul, Div, Exp, Log]
 
-operators' :: [String]
-operators' = ["+", "-", "*", "/", "^", "log"]
+symbolTable :: [(Operator, String)]
+symbolTable = sortBy (on compare (length . snd)) (zip operators symbols)
 
-lookupTable :: [(Operator, String)]
-lookupTable = sortBy (on compare (length . snd)) (zip operators operators')
+symbols :: [String]
+symbols = ["+", "-", "*", "/", "^", "log"]
+
+precedenceTable :: [(Operator, (Int, Bool))]
+precedenceTable = zip operators (zip precedences leftAssocs)
+
+precedences :: [Int]
+precedences = [6, 6, 7, 7, 8, 10]
+
+leftAssocs :: [Bool]
+leftAssocs = [True, True, True, True, False, True]
