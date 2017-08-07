@@ -1,6 +1,6 @@
 module Rational where
 
-import Data.Ratio
+import Data.Ratio ((%), numerator, denominator)
 
 import Equation
 
@@ -50,7 +50,7 @@ fromQ (Q n d) = fromIntegral n % fromIntegral d
 fromQ (R r) = approxQ (r, 1)
 
 approxQ :: (Double, Integer) -> Rational
-approxQ (n, d)
+approxQ q @ (n, d)
   | n == fromIntegral (floor n) = floor n % d
   | otherwise = approxQ (10 * n, 10 * d)
 

@@ -1,6 +1,6 @@
 module Test where
 
-import Test.HUnit
+import Test.HUnit ((~?=), Test (TestList), runTestTT)
 
 import Equation
 import Lexer
@@ -8,34 +8,11 @@ import Parser
 
 --------------------------------------------------------------------------------
 
-testInput :: Input
-testInput = "f(x) / log3(4*5) = (ax^2 - (b*x + c1)) / (6.7 ^ -8.9)"
-
-testEqn :: Equation
-testEqn = Eqn
-  [ Var 'f', Opn, Var 'x', Cls, Opr Div, Opr Log
-  , Con (Z 3), Opn, Con (Z 4), Opr Mul, Con (Z 5), Cls ]
-  [ Opn, Var 'a', Var 'x', Opr Exp, Con (Z 2), Opr Sub, Opn
-  , Var 'b', Opr Mul, Var 'x', Opr Add, Var 'c', Con (Z 1), Cls, Cls
-  , Opr Div, Opn, Con (Q 67 10), Opr Exp, Opr Sub, Con (Q 89 10), Cls ]
-
-testInput' :: Input
-testInput' = "f / log3(4*5) ^ (a^2 - (b*x + c)) / 6.7 ^ (0-8.9)"
-
-testRPN :: Queue
-testRPN =
-  [ Var 'f', Con (Z 3), Con (Z 4), Con (Z 5)
-  , Opr Mul, Opr Log, Var 'a', Con (Z 2), Opr Exp, Var 'b'
-  , Var 'x', Opr Mul, Var 'c', Opr Add, Opr Sub, Opr Exp, Opr Div
-  , Con (Q 67 10), Con (Z 0), Con (Q 89 10), Opr Sub, Opr Exp, Opr Div ]
-
---------------------------------------------------------------------------------
-
-lexExp' :: Input -> Tokens
-lexExp' = fst . lexExp
+lexExp'' :: Input -> Tokens
+lexExp'' = fst . lexExp
 
 convertRPN' :: Input -> Maybe Queue
-convertRPN' = convertRPN . lexExp'
+convertRPN' = convertRPN . lexExp''
 
 --------------------------------------------------------------------------------
 
@@ -75,34 +52,71 @@ lexerTests = TestList
   , lexEqn "x==x=x" ~?= Nothing
   , lexEqn "=x=x=x" ~?= Nothing
   , lexEqn "x=x=x=x" ~?= Nothing
-  , lexEqn "x = y" ~?= Just (Eqn [Var 'x'] [Var 'y'])
-  , lexExp' "1" ~?= [Con (Z 1)]
-  , lexExp' "1.2" ~?= [Con (Q 6 5)]
-  , lexExp' "x" ~?= [Var 'x']
-  , lexExp' "xy" ~?= [Var 'x', Var 'y']
-  , lexExp' "x y" ~?= [Var 'x', Var 'y']
-  , lexExp' "+" ~?= [Opr Add]
-  , lexExp' "1.2*x" ~?= [Con (Q 6 5), Opr Mul, Var 'x']
-  , lexExp' "log" ~?= [Opr Log]
-  , lexExp' "1.2logx" ~?= [Con (Q 6 5), Opr Log, Var 'x']
-  , lexExp' "(log)" ~?= [Opn, Opr Log, Cls]
-  , lexExp' "log^log" ~?= [Opr Log, Opr Exp, Opr Log]
-  , lexExp' "?" ~?= [Not]
+  , lexEqn "x=y" ~?= Just (Eqn [Par 'x'] [Par 'y'])
+  , lexEqn " x = y " ~?= Just (Eqn [Par 'x'] [Par 'y'])
+  , lexEqn "-x=-y" ~?= Just (Eqn [Con (Z (-1)), Opr Jux, Par 'x'] [Con (Z (-1)), Opr Jux, Par 'y'])
+  , lexEqn " - x = - y " ~?= Just (Eqn [Con (Z (-1)), Opr Jux, Par 'x'] [Con (Z (-1)), Opr Jux, Par 'y'])
+  , lexExp'' "1" ~?= [Con (Z 1)]
+  , lexExp'' "1.2" ~?= [Con (Q 6 5)]
+  , lexExp'' "1 2" ~?= [Con (Z 1), Opr Jux, Con (Z 2)]
+  , lexExp'' "1.2 3.4" ~?= [Con (Q 6 5), Opr Jux, Con (Q 17 5)]
+  , lexExp'' "x" ~?= [Par 'x']
+  , lexExp'' "xy" ~?= [Par 'x', Opr Jux, Par 'y']
+  , lexExp'' "x y" ~?= [Par 'x', Opr Jux, Par 'y']
+  , lexExp'' "1.2x" ~?= [Con (Q 6 5), Opr Jux, Par 'x']
+  , lexExp'' "x1.2" ~?= [Par 'x', Opr Jux, Con (Q 6 5)]
+  , lexExp'' "+*^" ~?= [Opr Add, Opr Mul, Opr Exp]
+  , lexExp'' "log" ~?= [Fun Log, Opn, Cls]
+  , lexExp'' "1.2log" ~?= [Con (Q 6 5), Opr Jux, Fun Log, Opn, Cls]
+  , lexExp'' "log1.2" ~?= [Fun Log, Opn, Cls, Opr Jux, Con (Q 6 5)]
+  , lexExp'' "xlog" ~?= [Par 'x', Opr Jux, Fun Log, Opn, Cls]
+  , lexExp'' "logx" ~?= [Fun Log, Opn, Cls, Opr Jux, Par 'x']
+  , lexExp'' "(,)?" ~?= [Opn, Sep, Cls, Not]
+  , lexExp'' "1.2(" ~?= [Con (Q 6 5), Opr Jux, Opn]
+  , lexExp'' "x(" ~?= [Par 'x', Opr Jux, Opn]
+  , lexExp'' ")(" ~?= [Cls, Opr Jux, Opn]
+  , lexExp'' "-2.3" ~?= [Con (Z (-1)), Opr Jux, Con (Q 23 10)]
+  , lexExp'' "1-2.3" ~?= [Con (Z 1), Opr Sub, Con (Q 23 10)]
+  , lexExp'' "x-2.3" ~?= [Par 'x', Opr Sub, Con (Q 23 10)]
+  , lexExp'' "+-2.3" ~?= [Opr Add, Con (Z (-1)), Opr Jux, Con (Q 23 10)]
+  , lexExp'' "log-2.3" ~?= [Fun Log, Opn, Cls, Opr Sub, Con (Q 23 10)]
+  , lexExp'' ",-2.3" ~?= [Sep, Con (Z (-1)), Opr Jux, Con (Q 23 10)]
+  , lexExp'' "(-2.3" ~?= [Opn, Con (Z (-1)), Opr Jux, Con (Q 23 10)]
+  , lexExp'' ")-2.3" ~?= [Cls, Opr Sub, Con (Q 23 10)]
+  , lexExp'' "?-2.3" ~?= [Not, Opr Sub, Con (Q 23 10)]
   , constantMatch "" ~?= Nothing
   , constantMatch " " ~?= Nothing
   , constantMatch "x" ~?= Nothing
   , constantMatch "x1" ~?= Nothing
-  , constantMatch "1" ~?= Just (Z 1, "")
-  , constantMatch "1.2" ~?= Just (Q 6 5, "")
-  , constantMatch "1+" ~?= Just (Z 1, "+")
-  , constantMatch "1.2+" ~?= Just (Q 6 5, "+")
-  , constantMatch "1.2.3" ~?= Just (Q 6 5, ".3")
+  , constantMatch "1" ~?= Just (Con (Z 1), "")
+  , constantMatch "1.2" ~?= Just (Con (Q 6 5), "")
+  , constantMatch "1+" ~?= Just (Con (Z 1), "+")
+  , constantMatch "1.2+" ~?= Just (Con (Q 6 5), "+")
+  , constantMatch "1.2.3" ~?= Just (Con (Q 6 5), ".3")
+  , constantMatch " 1 .2" ~?= Just (Con (Z 1), " .2")
+  , parameterMatch "" ~?= Nothing
+  , parameterMatch " " ~?= Just (Not, "")
+  , parameterMatch " x" ~?= Just (Not, "x")
+  , parameterMatch "1" ~?= Just (Not, "")
+  , parameterMatch "1x" ~?= Just (Not, "x")
+  , parameterMatch "x" ~?= Just (Par 'x', "")
+  , parameterMatch "x1" ~?= Just (Par 'x', "1")
   , operatorMatch "" ~?= Nothing
   , operatorMatch " " ~?= Nothing
   , operatorMatch "x" ~?= Nothing
   , operatorMatch "x+" ~?= Nothing
-  , operatorMatch "+x" ~?= Just (Add, "x")
-  , operatorMatch "logx" ~?= Just (Log, "x")
+  , operatorMatch " +" ~?= Nothing
+  , operatorMatch "+x" ~?= Just (Opr Add, "x")
+  , operatorMatch "++" ~?= Just (Opr Add, "+")
+  , functionMatch "" ~?= Nothing
+  , functionMatch " " ~?= Nothing
+  , functionMatch "x" ~?= Nothing
+  , functionMatch "xlog" ~?= Nothing
+  , functionMatch " l o g " ~?= Nothing
+  , functionMatch " log log " ~?= Nothing
+  , functionMatch "logx" ~?= Just (Fun Log, "()x")
+  , functionMatch "log(x)" ~?= Just (Fun Log, "(x)")
+  , functionMatch "loglog" ~?= Just (Fun Log, "()log")
   , patternMatch "" "" ~?= Just ""
   , patternMatch "" "x" ~?= Nothing
   , patternMatch "x" "" ~?= Just "x"
@@ -110,7 +124,6 @@ lexerTests = TestList
   , patternMatch "x" "xy" ~?= Nothing
   , patternMatch "xy" "x" ~?= Just "y"
   , patternMatch "xy" "xy" ~?= Just ""
-  , lexEqn testInput ~?= Just testEqn
   ]
 
 --------------------------------------------------------------------------------
@@ -120,37 +133,51 @@ parserTests = TestList
   [ convertRPN' "(" ~?= Nothing
   , convertRPN' ")" ~?= Nothing
   , convertRPN' ")(" ~?= Nothing
+  , convertRPN' "," ~?= Nothing
+  , convertRPN' "(," ~?= Nothing
+  , convertRPN' ",)" ~?= Nothing
   , convertRPN' "" ~?= Just []
-  , convertRPN' "()" ~?= Just []
   , convertRPN' "(())" ~?= Just []
-  , convertRPN' "()()" ~?= Just []
-  , convertRPN' "x+y" ~?= Just [Var 'x', Var 'y', Opr Add]
-  , convertRPN' "xy+" ~?= Just [Var 'x', Var 'y', Opr Add]
-  , convertRPN' "+xy" ~?= Just [Var 'x', Var 'y', Opr Add]
-  , convertRPN' "x+y+z" ~?= Just [Var 'x', Var 'y', Opr Add, Var 'z', Opr Add]
-  , convertRPN' "(x+y)+z" ~?= Just [Var 'x', Var 'y', Opr Add, Var 'z', Opr Add]
-  , convertRPN' "x+(y+z)" ~?= Just [Var 'x', Var 'y', Var 'z', Opr Add, Opr Add]
-  , convertRPN' "x+y*z" ~?= Just [Var 'x', Var 'y', Var 'z', Opr Mul, Opr Add]
-  , convertRPN' "(x+y)*z" ~?= Just [Var 'x', Var 'y', Opr Add, Var 'z', Opr Mul]
-  , convertRPN' "x+(y*z)" ~?= Just [Var 'x', Var 'y', Var 'z', Opr Mul, Opr Add]
-  , convertRPN' "x*y+z" ~?= Just [Var 'x', Var 'y', Opr Mul, Var 'z', Opr Add]
-  , convertRPN' "(x*y)+z" ~?= Just [Var 'x', Var 'y', Opr Mul, Var 'z', Opr Add]
-  , convertRPN' "x*(y+z)" ~?= Just [Var 'x', Var 'y', Var 'z', Opr Add, Opr Mul]
-  , convertRPN' "x^y" ~?= Just [Var 'x', Var 'y', Opr Exp]
-  , convertRPN' "^xy" ~?= Just [Var 'x', Var 'y', Opr Exp]
-  , convertRPN' "xy^" ~?= Just [Var 'x', Var 'y', Opr Exp]
-  , convertRPN' "x^y^z" ~?= Just [Var 'x', Var 'y', Var 'z', Opr Exp, Opr Exp]
-  , convertRPN' "(x^y)^z" ~?= Just [Var 'x', Var 'y', Opr Exp, Var 'z', Opr Exp]
-  , convertRPN' "x^(y^z)" ~?= Just [Var 'x', Var 'y', Var 'z', Opr Exp, Opr Exp]
-  , convertRPN' "x+y^z" ~?= Just [Var 'x', Var 'y', Var 'z', Opr Exp, Opr Add]
-  , convertRPN' "x+(y^z)" ~?= Just [Var 'x', Var 'y', Var 'z', Opr Exp, Opr Add]
-  , convertRPN' "(x+y)^z" ~?= Just [Var 'x', Var 'y', Opr Add, Var 'z', Opr Exp]
-  , convertRPN' "logxy" ~?= Just [Var 'x', Var 'y', Opr Log]
-  , convertRPN' "xlogy" ~?= Just [Var 'x', Var 'y', Opr Log]
-  , convertRPN' "xylog" ~?= Just [Var 'x', Var 'y', Opr Log]
-  , convertRPN' "logxyz" ~?= Just [Var 'x', Var 'y', Var 'z', Opr Log]
-  , convertRPN' "xlogyz" ~?= Just [Var 'x', Var 'y', Var 'z', Opr Log]
-  , convertRPN' "xylogz" ~?= Just [Var 'x', Var 'y', Var 'z', Opr Log]
-  , convertRPN' "xyzlog" ~?= Just [Var 'x', Var 'y', Var 'z', Opr Log]
-  , convertRPN' testInput' ~?= Just testRPN
+  , convertRPN' "()()" ~?= Just [Opr Jux]
+  , convertRPN' "(,)" ~?= Just []
+  , convertRPN' "x+y" ~?= Just [Par 'x', Par 'y', Opr Add]
+  , convertRPN' "xy+" ~?= Just [Par 'x', Par 'y', Opr Jux, Opr Add]
+  , convertRPN' "+xy" ~?= Just [Par 'x', Par 'y', Opr Jux, Opr Add]
+  , convertRPN' "x+y+z" ~?= Just [Par 'x', Par 'y', Opr Add, Par 'z', Opr Add]
+  , convertRPN' "(x+y)+z" ~?= Just [Par 'x', Par 'y', Opr Add, Par 'z', Opr Add]
+  , convertRPN' "x+(y+z)" ~?= Just [Par 'x', Par 'y', Par 'z', Opr Add, Opr Add]
+  , convertRPN' "x+y*z" ~?= Just [Par 'x', Par 'y', Par 'z', Opr Mul, Opr Add]
+  , convertRPN' "(x+y)*z" ~?= Just [Par 'x', Par 'y', Opr Add, Par 'z', Opr Mul]
+  , convertRPN' "x+(y*z)" ~?= Just [Par 'x', Par 'y', Par 'z', Opr Mul, Opr Add]
+  , convertRPN' "x*y+z" ~?= Just [Par 'x', Par 'y', Opr Mul, Par 'z', Opr Add]
+  , convertRPN' "(x*y)+z" ~?= Just [Par 'x', Par 'y', Opr Mul, Par 'z', Opr Add]
+  , convertRPN' "x*(y+z)" ~?= Just [Par 'x', Par 'y', Par 'z', Opr Add, Opr Mul]
+  , convertRPN' "x^y" ~?= Just [Par 'x', Par 'y', Opr Exp]
+  , convertRPN' "^xy" ~?= Just [Par 'x', Par 'y', Opr Jux, Opr Exp]
+  , convertRPN' "xy^" ~?= Just [Par 'x', Par 'y', Opr Jux, Opr Exp]
+  , convertRPN' "x^y^z" ~?= Just [Par 'x', Par 'y', Par 'z', Opr Exp, Opr Exp]
+  , convertRPN' "(x^y)^z" ~?= Just [Par 'x', Par 'y', Opr Exp, Par 'z', Opr Exp]
+  , convertRPN' "x^(y^z)" ~?= Just [Par 'x', Par 'y', Par 'z', Opr Exp, Opr Exp]
+  , convertRPN' "x*y^z" ~?= Just [Par 'x', Par 'y', Par 'z', Opr Exp, Opr Mul]
+  , convertRPN' "x*(y^z)" ~?= Just [Par 'x', Par 'y', Par 'z', Opr Exp, Opr Mul]
+  , convertRPN' "(x*y)^z" ~?= Just [Par 'x', Par 'y', Opr Mul, Par 'z', Opr Exp]
+  , convertRPN' "log" ~?= Just [Fun Log]
+  , convertRPN' "logx" ~?= Just [Fun Log, Par 'x', Opr Jux]
+  , convertRPN' "logxy" ~?= Just [Fun Log, Par 'x', Opr Jux, Par 'y', Opr Jux]
+  , convertRPN' "xlogy" ~?= Just [Par 'x', Fun Log, Opr Jux, Par 'y', Opr Jux]
+  , convertRPN' "xylog" ~?= Just [Par 'x', Par 'y', Opr Jux, Fun Log, Opr Jux]
+  , convertRPN' "log(x)" ~?= Just [Par 'x', Fun Log]
+  , convertRPN' "log(x,y)" ~?= Just [Par 'x', Par 'y', Fun Log]
+  , convertRPN' "x+logy" ~?= Just [Par 'x', Fun Log, Par 'y', Opr Jux, Opr Add]
+  , convertRPN' "(x+log)y" ~?= Just [Par 'x', Fun Log, Opr Add, Par 'y', Opr Jux]
+  , convertRPN' "x+log(y)" ~?= Just [Par 'x', Par 'y', Fun Log, Opr Add]
+  , convertRPN' "logx+y" ~?= Just [Fun Log, Par 'x', Opr Jux, Par 'y', Opr Add]
+  , convertRPN' "log(x+y)" ~?= Just [Par 'x', Par 'y', Opr Add, Fun Log]
+  , convertRPN' "log(x)+y" ~?= Just [Par 'x', Fun Log, Par 'y', Opr Add]
+  , convertRPN' "x+logyz" ~?= Just [Par 'x', Fun Log, Par 'y', Opr Jux, Par 'z', Opr Jux, Opr Add]
+  , convertRPN' "(x+log)yz" ~?= Just [Par 'x', Fun Log, Opr Add, Par 'y', Opr Jux, Par 'z', Opr Jux]
+  , convertRPN' "x+log(y,z)" ~?= Just [Par 'x', Par 'y', Par 'z', Fun Log, Opr Add]
+  , convertRPN' "logxy+z" ~?= Just [Fun Log, Par 'x', Opr Jux, Par 'y', Opr Jux, Par 'z', Opr Add]
+  , convertRPN' "logx(y+z)" ~?= Just [Fun Log, Par 'x', Opr Jux, Par 'y', Par 'z', Opr Add, Opr Jux]
+  , convertRPN' "log(x,y)+z" ~?= Just [Par 'x', Par 'y', Fun Log, Par 'z', Opr Add]
   ]

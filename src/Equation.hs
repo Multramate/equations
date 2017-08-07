@@ -1,25 +1,36 @@
 module Equation where
 
-import Data.List
-import Data.Function
+import Data.Function (on)
+import Data.List (sortBy)
+import Data.Maybe (fromJust)
 
 --------------------------------------------------------------------------------
 
+type LHS = [Token]
+type RHS = [Token]
+
 type Input = String
+type Tokens = [Token]
 
 type Queue = [Token]
 type Stack = [Token]
-type Tokens = [Token]
 
-type LHS = [Token]
-type RHS = [Token]
+type Symbol = String
+type Precedence = Int
+type Associativity = Bool
+type Arity = Int
+
+--------------------------------------------------------------------------------
 
 data Equation = Eqn LHS RHS -- Equation
               deriving (Eq, Show)
 
 data Token = Con Constant -- Constant
+           | Par Char     -- Parameter
            | Var Char     -- Variable
            | Opr Operator -- Operator
+           | Fun Function -- Function
+           | Sep          -- Separator
            | Opn          -- Open brackets
            | Cls          -- Close brackets
            | Not          -- Not a token
@@ -30,30 +41,43 @@ data Constant = Z Int     -- Integers
               | R Double  -- Reals
               deriving (Eq, Show)
 
-data Operator = Add -- Addition (+)
-              | Sub -- Subtraction (-)
-              | Mul -- Multiplication (*)
-              | Div -- Division (/)
-              | Exp -- Exponentiation (^)
-              | Log -- Logarithm (log)
+data Operator = Add -- Addition
+              | Sub -- Subtraction
+              | Mul -- Multiplication
+              | Div -- Division
+              | Exp -- Exponentiation
+              | Jux -- Juxtaposition
+              deriving (Eq, Show)
+
+data Function = Log -- Logarithm
               deriving (Eq, Show)
 
 --------------------------------------------------------------------------------
 
-operators :: [Operator]
-operators = [Add, Sub, Mul, Div, Exp, Log]
+getOperator :: Operator -> Symbol
+getOperator = fst . fromJust . flip lookup operatorTable
 
-symbolTable :: [(Operator, String)]
-symbolTable = sortBy (on compare (length . snd)) (zip operators symbols)
+getPrecedence :: Operator -> Precedence
+getPrecedence = fst . snd . fromJust . flip lookup operatorTable
 
-symbols :: [String]
-symbols = ["+", "-", "*", "/", "^", "log"]
+getAssociativity :: Operator -> Associativity
+getAssociativity = fst . snd . snd . fromJust . flip lookup operatorTable
 
-precedenceTable :: [(Operator, (Int, Bool))]
-precedenceTable = zip operators (zip precedences leftAssocs)
+getFunction :: Function -> Symbol
+getFunction = fst . fromJust . flip lookup functionTable
 
-precedences :: [Int]
-precedences = [6, 6, 7, 7, 8, 10]
+getArity :: Function -> Arity
+getArity = fst . snd . fromJust . flip lookup functionTable
 
-leftAssocs :: [Bool]
-leftAssocs = [True, True, True, True, False, True]
+operatorTable :: [(Operator, (Symbol, (Precedence, (Associativity, ()))))]
+operatorTable = map ($ ())
+  [ (,) Add . (,) "+" . (,) 6 . (,) True
+  , (,) Sub . (,) "-" . (,) 6 . (,) True
+  , (,) Mul . (,) "*" . (,) 7 . (,) True
+  , (,) Div . (,) "/" . (,) 7 . (,) True
+  , (,) Exp . (,) "^" . (,) 8 . (,) False
+  , (,) Jux . (,) "." . (,) 10 . (,) True ]
+
+functionTable :: [(Function, (Symbol, (Arity, ())))]
+functionTable = map ($ ())
+  [ (,) Log . (,) "log" . (,) 2 ]
