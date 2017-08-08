@@ -2,7 +2,7 @@ module Lexer where
 
 import Control.Applicative ((<|>), empty)
 import Data.Char (isAlpha, isSpace)
-import Data.Maybe (fromJust, listToMaybe)
+import Data.Maybe (fromMaybe, listToMaybe)
 import Data.Tuple.Extra (first)
 import Numeric (readFloat)
 
@@ -11,31 +11,33 @@ import Rational
 
 --------------------------------------------------------------------------------
 
-lexEqn :: Input -> Maybe Equation
+lexEqn :: Input -> Maybe (Tokens, Tokens)
 lexEqn input = case lexExp input of
-  (tokens @ (_ : _), '=' : input') -> case lexExp input' of
-    (tokens' @ (_ : _), []) -> Just (Eqn tokens tokens')
+  Just (tokens @ (_ : _), '=' : input') -> case lexExp input' of
+    Just (tokens' @ (_ : _), []) -> Just (tokens, tokens')
     _ -> Nothing
   _ -> Nothing
 
-lexExp :: Input -> (Tokens, Input)
+lexExp :: Input -> Maybe (Tokens, Input)
 lexExp input = case lexExp' input of
-  (Opr Sub : tokens, input') -> (Con (Z (-1)) : Opr Jux : tokens, input')
-  (tokens, input') -> (tokens, input')
+  Just (Opr Sub : tokens, input') -> Just (tokens', input')
+    where
+      tokens' = Num (Z (-1)) : Opr Jux : tokens
+  exp -> exp
 
-lexExp' :: Input -> (Tokens, Input)
+lexExp' :: Input -> Maybe (Tokens, Input)
 lexExp' input' @ (char : input)
-  | char == '=' = ([], input')
+  | char == '=' = Just ([], input')
   | char == ',' = recurseLex Sep input
   | char == '(' = recurseLex Opn input
   | char == ')' = recurseLex Cls input
   | isSpace char = lexExp' input
-  | otherwise = uncurry recurseLex (getMatch matchList)
+  | otherwise = uncurry recurseLex =<< getMatch matchList
   where
-    recurseLex = (. lexExp') . first . tokenRewrite
-    getMatch = fromJust . foldr ((<|>) . ($ input')) empty
-    matchList = [constantMatch, functionMatch, operatorMatch, parameterMatch]
-lexExp' _ = ([], [])
+    recurseLex = (. lexExp') . fmap . first . tokenRewrite
+    getMatch = foldr ((<|>) . ($ input')) empty
+    matchList = [functionMatch, operatorMatch, numericMatch, characterMatch]
+lexExp' _ = Just ([], [])
 
 --------------------------------------------------------------------------------
 
@@ -44,26 +46,26 @@ tokenRewrite token tokens' @ (Opr Sub : tokens)
   | any ($ token) isNeg = tokens''
   where
     isNeg = [isOperator, (== Sep), (== Opn)]
-    tokens'' = token : Con (Z (-1)) : Opr Jux : tokens
+    tokens'' = token : Num (Z (-1)) : Opr Jux : tokens
 tokenRewrite token tokens @ (token' : _)
   | any ($ token) isJuxLeft && any ($ token') isJuxRight = tokens'
   where
-    isJuxLeft = [isConstant, isParameter, isVariable, (== Cls)]
-    isJuxRight = [isConstant, isParameter, isVariable, isFunction, (== Opn)]
+    isJuxLeft = [isNumeric, isCharacter, (== Cls)]
+    isJuxRight = [isNumeric, isCharacter, isFunction, (== Opn)]
     tokens' = token : Opr Jux : tokens
 tokenRewrite token tokens = token : tokens
 
-constantMatch :: Input -> Maybe (Token, Input)
-constantMatch input = listToMaybe zList <|> listToMaybe qList
+numericMatch :: Input -> Maybe (Token, Input)
+numericMatch input = listToMaybe zList <|> listToMaybe qList
   where
-    zList = map (first (Con . Z)) (reads input :: [(Int, String)])
-    qList = map (first (Con . toQ)) (readFloat input :: [(Rational, String)])
+    zList = map (first (Num . Z)) (reads input :: [(Int, String)])
+    qList = map (first (Num . toQ)) (readFloat input :: [(Rational, String)])
 
-parameterMatch :: Input -> Maybe (Token, Input)
-parameterMatch (char : input)
-  | isAlpha char = Just (Par char, input)
-parameterMatch (_ : input) = Just (Not, input)
-parameterMatch _ = Nothing
+characterMatch :: Input -> Maybe (Token, Input)
+characterMatch (char : input)
+  | isAlpha char = Just (Chr char, input)
+characterMatch (_ : input) = Nothing
+characterMatch _ = Nothing
 
 operatorMatch :: Input -> Maybe (Token, Input)
 operatorMatch = fmap (first Opr) . flip symbolMatch operatorTable
@@ -76,17 +78,13 @@ functionMatch input = case fmap (first Fun) (symbolMatch input functionTable) of
 
 --------------------------------------------------------------------------------
 
-isConstant :: Token -> Bool
-isConstant (Con _) = True
-isConstant _ = False
+isNumeric :: Token -> Bool
+isNumeric (Num _) = True
+isNumeric _ = False
 
-isParameter :: Token -> Bool
-isParameter (Par _) = True
-isParameter _ = False
-
-isVariable :: Token -> Bool
-isVariable (Var _) = True
-isVariable _ = False
+isCharacter :: Token -> Bool
+isCharacter (Chr _) = True
+isCharacter _ = False
 
 isOperator :: Token -> Bool
 isOperator (Opr _) = True

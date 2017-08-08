@@ -6,40 +6,49 @@ import Data.Maybe (fromJust)
 
 --------------------------------------------------------------------------------
 
+-- Equation
 type LHS = [Token]
 type RHS = [Token]
-
-type Input = String
-type Tokens = [Token]
-
-type Queue = [Token]
-type Stack = [Token]
-
 type Symbol = String
 type Precedence = Int
 type Associativity = Bool
 type Arity = Int
 
+-- Lexer
+type Input = String
+type Tokens = [Token]
+
+-- Parser
+type TokenQueue = [Token]
+type TokenStack = [Token]
+type ExpressionStack = [Expression]
+type Environment = [Char]
+
 --------------------------------------------------------------------------------
 
-data Equation = Eqn LHS RHS -- Equation
+data Equation = Eqn Expression Expression -- Equation
               deriving (Eq, Show)
 
-data Token = Con Constant -- Constant
-           | Par Char     -- Parameter
-           | Var Char     -- Variable
+data Token = Num Numeric -- Numeric
+           | Chr Char -- Character
            | Opr Operator -- Operator
            | Fun Function -- Function
-           | Sep          -- Separator
-           | Opn          -- Open brackets
-           | Cls          -- Close brackets
-           | Not          -- Not a token
+           | Sep -- Separator
+           | Opn -- Open brackets
+           | Cls -- Close brackets
            deriving (Eq, Show)
 
-data Constant = Z Int     -- Integers
-              | Q Int Int -- Rationals
-              | R Double  -- Reals
-              deriving (Eq, Show)
+data Expression = Val Numeric -- Value
+                | Con Char -- Constant
+                | Var Char -- Variable
+                | Bin Operator Expression Expression -- Binary Operator
+                | App Function [Expression] -- Function Application
+                deriving (Eq, Show)
+
+data Numeric = Z Int -- Integers
+             | Q Int Int -- Rationals
+             | R Double -- Reals
+             deriving (Eq, Show)
 
 data Operator = Add -- Addition
               | Sub -- Subtraction

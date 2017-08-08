@@ -1,15 +1,29 @@
 module Parser where
 
 import Data.Maybe (fromJust)
+import Data.Tuple.Extra (both)
 
 import Equation
 
 --------------------------------------------------------------------------------
 
-convertRPN :: Tokens -> Maybe Queue
-convertRPN = fmap reverse . shuntingYard [] []
+parseEqn :: Environment -> (Tokens, Tokens) -> Maybe Equation
+parseEqn = (.) (uncurry ((<*>) . (<$>) Eqn)) . both . parseExp
 
-shuntingYard :: Queue -> Stack -> Tokens -> Maybe Queue
+parseExp :: Environment -> Tokens -> Maybe Expression
+parseExp env tokens = convertRPN tokens >>= convertAST env
+
+convertRPN :: Tokens -> Maybe TokenQueue
+convertRPN = shuntingYard [] []
+
+convertAST :: Environment -> TokenQueue -> Maybe Expression
+convertAST env queue = case postfixTree env queue of
+  Just (exp, []) -> Just exp
+  _ -> Nothing
+
+--------------------------------------------------------------------------------
+
+shuntingYard :: TokenQueue -> TokenStack -> Tokens -> Maybe TokenQueue
 shuntingYard queue stack tokens' @ (token : tokens) = case token of
   Opr opr -> case stack of
     token' @ (Opr opr') : stack
@@ -27,14 +41,11 @@ shuntingYard queue stack tokens' @ (token : tokens) = case token of
       _ -> shuntingYard queue stack' tokens
     token' : stack' -> shuntingYard (token' : queue) stack' tokens'
     _ -> Nothing
-  Not -> Nothing
   _ -> shuntingYard (token : queue) stack tokens
 shuntingYard queue stack _ = case stack of
   Opn : stack' -> Nothing
   token : stack' -> shuntingYard (token : queue) stack' []
   _ -> Just queue
-
---------------------------------------------------------------------------------
 
 notPrecedes :: Operator -> Operator -> Bool
 notPrecedes opr opr' = less < more || less == more && left
@@ -42,3 +53,29 @@ notPrecedes opr opr' = less < more || less == more && left
     less = getPrecedence opr
     more = getPrecedence opr'
     left = getAssociativity opr
+
+--------------------------------------------------------------------------------
+
+postfixTree :: Environment -> TokenQueue -> Maybe (Expression, TokenQueue)
+postfixTree _ (Num num : queue)
+  = Just (Val num, queue)
+postfixTree env (Chr chr : queue)
+  = Just ((if elem chr env then Var else Con) chr, queue)
+postfixTree env (Opr opr : queue)
+  = case popArguments 2 env queue of
+  Just ([arg, arg'], queue') -> Just (Bin opr arg' arg, queue')
+  Nothing -> Nothing
+postfixTree env (Fun fun : queue)
+  = case popArguments (getArity fun) env queue of
+  Just (args, queue') -> Just (App fun (reverse args), queue')
+  Nothing -> Nothing
+postfixTree _ _ = Nothing
+
+popArguments :: Arity -> Environment -> TokenQueue
+  -> Maybe (ExpressionStack, TokenQueue)
+popArguments 0 _ queue = Just ([], queue)
+popArguments arity env queue = case postfixTree env queue of
+  Just (arg, queue') -> case popArguments (pred arity) env queue' of
+    Just (args, queue'') -> Just (arg : args, queue'')
+    _ -> Nothing
+  _ -> Nothing
