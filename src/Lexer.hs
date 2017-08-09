@@ -7,24 +7,24 @@ import Data.Tuple.Extra (first)
 import Numeric (readFloat)
 
 import Equation
-import Rational
 
 --------------------------------------------------------------------------------
 
+-- Lexes an input string into a tuple of token lists
 lexEqn :: Input -> Maybe (Tokens, Tokens)
 lexEqn input = case lexExp input of
-  Just (tokens @ (_ : _), '=' : input') -> case lexExp input' of
-    Just (tokens' @ (_ : _), []) -> Just (tokens, tokens')
+  Just (toks @ (_ : _), '=' : input') -> case lexExp input' of
+    Just (toks' @ (_ : _), []) -> Just (toks, toks')
     _ -> Nothing
   _ -> Nothing
 
+-- Lexes an input string with an initial minus sign into a token list
 lexExp :: Input -> Maybe (Tokens, Input)
 lexExp input = case lexExp' input of
-  Just (Opr Sub : tokens, input') -> Just (tokens', input')
-    where
-      tokens' = Num (Z (-1)) : Opr Jux : tokens
+  Just (Opr Sub : toks, input') -> Just (Num (Z (-1)) : Opr Jux : toks, input')
   exp -> exp
 
+-- Lexes an input string with an equals sign into a token list
 lexExp' :: Input -> Maybe (Tokens, Input)
 lexExp' input' @ (char : input)
   | char == '=' = Just ([], input')
@@ -34,74 +34,82 @@ lexExp' input' @ (char : input)
   | isSpace char = lexExp' input
   | otherwise = uncurry recurseLex =<< getMatch matchList
   where
-    recurseLex = (. lexExp') . fmap . first . tokenRewrite
+    recurseLex = (. lexExp') . fmap . first . rewriteToks
     getMatch = foldr ((<|>) . ($ input')) empty
-    matchList = [functionMatch, operatorMatch, numericMatch, characterMatch]
+    matchList = [matchFun, matchOpr, matchNum, matchChr]
 lexExp' _ = Just ([], [])
 
 --------------------------------------------------------------------------------
 
-tokenRewrite :: Token -> Tokens -> Tokens
-tokenRewrite token tokens' @ (Opr Sub : tokens)
-  | any ($ token) isNeg = tokens''
+-- Rewrites a tokens list for certain juxtaposed tokens
+rewriteToks :: Token -> Tokens -> Tokens
+rewriteToks tok toks' @ (Opr Sub : toks)
+  | any ($ tok) isNeg = tok : Num (Z (-1)) : Opr Jux : toks
   where
     isNeg = [isOperator, (== Sep), (== Opn)]
-    tokens'' = token : Num (Z (-1)) : Opr Jux : tokens
-tokenRewrite token tokens @ (token' : _)
-  | any ($ token) isJuxLeft && any ($ token') isJuxRight = tokens'
+rewriteToks tok toks @ (tok' : _)
+  | any ($ tok) isJuxLeft && any ($ tok') isJuxRight = tok : Opr Jux : toks
   where
     isJuxLeft = [isNumeric, isCharacter, (== Cls)]
     isJuxRight = [isNumeric, isCharacter, isFunction, (== Opn)]
-    tokens' = token : Opr Jux : tokens
-tokenRewrite token tokens = token : tokens
+rewriteToks tok toks = tok : toks
 
-numericMatch :: Input -> Maybe (Token, Input)
-numericMatch input = listToMaybe zList <|> listToMaybe qList
+-- Matches an input string with possible numerics
+matchNum :: Input -> Maybe (Token, Input)
+matchNum input = listToMaybe zList <|> listToMaybe qList
   where
     zList = map (first (Num . Z)) (reads input :: [(Int, String)])
     qList = map (first (Num . toQ)) (readFloat input :: [(Rational, String)])
 
-characterMatch :: Input -> Maybe (Token, Input)
-characterMatch (char : input)
+-- Matches an input string with possible characters
+matchChr :: Input -> Maybe (Token, Input)
+matchChr (char : input)
   | isAlpha char = Just (Chr char, input)
-characterMatch (_ : input) = Nothing
-characterMatch _ = Nothing
+matchChr _ = Nothing
 
-operatorMatch :: Input -> Maybe (Token, Input)
-operatorMatch = fmap (first Opr) . flip symbolMatch operatorTable
+-- Matches an input string with possible operators
+matchOpr :: Input -> Maybe (Token, Input)
+matchOpr = fmap (first Opr) . flip matchSymbol operatorTable
 
-functionMatch :: Input -> Maybe (Token, Input)
-functionMatch input = case fmap (first Fun) (symbolMatch input functionTable) of
-  Just (token, input' @ ('(' : _)) -> Just (token, input')
-  Just (token, input') -> Just (token, '(' : ')' : input')
+-- Matches an input string with possible functions
+matchFun :: Input -> Maybe (Token, Input)
+matchFun input = case fmap (first Fun) (matchSymbol input functionTable) of
+  Just (tok, input' @ ('(' : _)) -> Just (tok, input')
+  Just (tok, input') -> Just (tok, '(' : ')' : input')
   _ -> Nothing
 
 --------------------------------------------------------------------------------
 
+-- Checks if a token is a numeric
 isNumeric :: Token -> Bool
 isNumeric (Num _) = True
 isNumeric _ = False
 
+-- Checks if a token is a character
 isCharacter :: Token -> Bool
 isCharacter (Chr _) = True
 isCharacter _ = False
 
+-- Checks if a token is an operator
 isOperator :: Token -> Bool
 isOperator (Opr _) = True
 isOperator _ = False
 
+-- Checks if a token is a function
 isFunction :: Token -> Bool
 isFunction (Fun _) = True
 isFunction _ = False
 
-symbolMatch :: Input -> [(a, (Symbol, b))] -> Maybe (a, Input)
-symbolMatch input = foldl match empty
+-- Matches an input string with possible symbols
+matchSymbol :: Input -> [(a, (Symbol, b))] -> Maybe (a, Input)
+matchSymbol input = foldl match empty
   where
-    match matches (token, (symbol, _))
-      = matches <|> (,) token <$> patternMatch input symbol
+    match matches (tok, (symbol, _))
+      = matches <|> (,) tok <$> matchPattern input symbol
 
-patternMatch :: String -> String -> Maybe String
-patternMatch (char : input) (char' : pattern)
-  | char == char' = patternMatch input pattern
-patternMatch input [] = Just input
-patternMatch _ _ = Nothing
+-- Matches a string with a possible pattern
+matchPattern :: String -> String -> Maybe String
+matchPattern (char : input) (char' : pattern)
+  | char == char' = matchPattern input pattern
+matchPattern input [] = Just input
+matchPattern _ _ = Nothing

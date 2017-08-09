@@ -5,6 +5,8 @@ import Test.HUnit ((~?=), Test (TestList), runTestTT)
 import Equation
 import Lexer
 import Parser
+import Show
+import Solver
 
 --------------------------------------------------------------------------------
 
@@ -17,117 +19,84 @@ convertRPN' = fmap reverse . (=<<) convertRPN . lexExp''
 convertAST' :: Input -> Maybe Expression
 convertAST' = (=<<) (convertAST []) . (=<<) convertRPN . lexExp''
 
+simplify' :: Input -> Maybe String
+simplify' = (=<<) ((=<<) (fmap showExp . simplify) . parseExp "x") . lexExp''
+
 --------------------------------------------------------------------------------
 
 tests :: Test
 tests = TestList
-  [lexerTests, parserTests]
+  [lexerTests, parserTests, simplifyTests]
 
 --------------------------------------------------------------------------------
 
-lexerTests :: Test
-lexerTests = TestList
-  [ lexEqn " " ~?= Nothing
-  , lexEqn "=" ~?= Nothing
-  , lexEqn "x=" ~?= Nothing
-  , lexEqn "=x" ~?= Nothing
-  , lexEqn "==" ~?= Nothing
-  , lexEqn "x==" ~?= Nothing
-  , lexEqn "=x=" ~?= Nothing
-  , lexEqn "==x" ~?= Nothing
-  , lexEqn "x=x=" ~?= Nothing
-  , lexEqn "x==x" ~?= Nothing
-  , lexEqn "=x=x" ~?= Nothing
-  , lexEqn "x=x=x" ~?= Nothing
-  , lexEqn "===" ~?= Nothing
-  , lexEqn "x===" ~?= Nothing
-  , lexEqn "=x==" ~?= Nothing
-  , lexEqn "==x=" ~?= Nothing
-  , lexEqn "===x" ~?= Nothing
-  , lexEqn "x=x==" ~?= Nothing
-  , lexEqn "x==x=" ~?= Nothing
-  , lexEqn "x===x" ~?= Nothing
-  , lexEqn "=x=x=" ~?= Nothing
-  , lexEqn "=x==x" ~?= Nothing
-  , lexEqn "==x=x" ~?= Nothing
-  , lexEqn "x=x=x=" ~?= Nothing
-  , lexEqn "x=x==x" ~?= Nothing
-  , lexEqn "x==x=x" ~?= Nothing
-  , lexEqn "=x=x=x" ~?= Nothing
-  , lexEqn "x=x=x=x" ~?= Nothing
-  , lexEqn "x=y" ~?= Just ([Chr 'x'], [Chr 'y'])
-  , lexEqn " x = y " ~?= Just ([Chr 'x'], [Chr 'y'])
-  , lexEqn "-x=-y" ~?= Just ([Num (Z (-1)), Opr Jux, Chr 'x'], [Num (Z (-1)), Opr Jux, Chr 'y'])
-  , lexEqn " - x = - y " ~?= Just ([Num (Z (-1)), Opr Jux, Chr 'x'], [Num (Z (-1)), Opr Jux, Chr 'y'])
-  , lexExp'' "1" ~?= Just [Num (Z 1)]
-  , lexExp'' "1.2" ~?= Just [Num (Q 6 5)]
-  , lexExp'' "1 2" ~?= Just [Num (Z 1), Opr Jux, Num (Z 2)]
-  , lexExp'' "1.2 3.4" ~?= Just [Num (Q 6 5), Opr Jux, Num (Q 17 5)]
-  , lexExp'' "x" ~?= Just [Chr 'x']
-  , lexExp'' "xy" ~?= Just [Chr 'x', Opr Jux, Chr 'y']
-  , lexExp'' "x y" ~?= Just [Chr 'x', Opr Jux, Chr 'y']
-  , lexExp'' "1.2x" ~?= Just [Num (Q 6 5), Opr Jux, Chr 'x']
-  , lexExp'' "x1.2" ~?= Just [Chr 'x', Opr Jux, Num (Q 6 5)]
-  , lexExp'' "+*^" ~?= Just [Opr Add, Opr Mul, Opr Exp]
-  , lexExp'' "log" ~?= Just [Fun Log, Opn, Cls]
-  , lexExp'' "1.2log" ~?= Just [Num (Q 6 5), Opr Jux, Fun Log, Opn, Cls]
-  , lexExp'' "log1.2" ~?= Just [Fun Log, Opn, Cls, Opr Jux, Num (Q 6 5)]
-  , lexExp'' "xlog" ~?= Just [Chr 'x', Opr Jux, Fun Log, Opn, Cls]
-  , lexExp'' "logx" ~?= Just [Fun Log, Opn, Cls, Opr Jux, Chr 'x']
-  , lexExp'' "(,)" ~?= Just [Opn, Sep, Cls]
-  , lexExp'' "1.2(" ~?= Just [Num (Q 6 5), Opr Jux, Opn]
-  , lexExp'' "x(" ~?= Just [Chr 'x', Opr Jux, Opn]
-  , lexExp'' ")(" ~?= Just [Cls, Opr Jux, Opn]
-  , lexExp'' "-2.3" ~?= Just [Num (Z (-1)), Opr Jux, Num (Q 23 10)]
-  , lexExp'' "1-2.3" ~?= Just [Num (Z 1), Opr Sub, Num (Q 23 10)]
-  , lexExp'' "x-2.3" ~?= Just [Chr 'x', Opr Sub, Num (Q 23 10)]
-  , lexExp'' "+-2.3" ~?= Just [Opr Add, Num (Z (-1)), Opr Jux, Num (Q 23 10)]
-  , lexExp'' "log-2.3" ~?= Just [Fun Log, Opn, Cls, Opr Sub, Num (Q 23 10)]
-  , lexExp'' "log()-2.3" ~?= Just [Fun Log, Opn, Cls, Opr Sub, Num (Q 23 10)]
-  , lexExp'' ",-2.3" ~?= Just [Sep, Num (Z (-1)), Opr Jux, Num (Q 23 10)]
-  , lexExp'' "(-2.3" ~?= Just [Opn, Num (Z (-1)), Opr Jux, Num (Q 23 10)]
-  , lexExp'' ")-2.3" ~?= Just [Cls, Opr Sub, Num (Q 23 10)]
-  , numericMatch "" ~?= Nothing
-  , numericMatch " " ~?= Nothing
-  , numericMatch "x" ~?= Nothing
-  , numericMatch "x1" ~?= Nothing
-  , numericMatch "1" ~?= Just (Num (Z 1), "")
-  , numericMatch "1.2" ~?= Just (Num (Q 6 5), "")
-  , numericMatch "1+" ~?= Just (Num (Z 1), "+")
-  , numericMatch "1.2+" ~?= Just (Num (Q 6 5), "+")
-  , numericMatch "1.2.3" ~?= Just (Num (Q 6 5), ".3")
-  , numericMatch " 1 .2" ~?= Just (Num (Z 1), " .2")
-  , characterMatch "" ~?= Nothing
-  , characterMatch " " ~?= Nothing
-  , characterMatch " x" ~?= Nothing
-  , characterMatch "1" ~?= Nothing
-  , characterMatch "1x" ~?= Nothing
-  , characterMatch "x" ~?= Just (Chr 'x', "")
-  , characterMatch "x1" ~?= Just (Chr 'x', "1")
-  , operatorMatch "" ~?= Nothing
-  , operatorMatch " " ~?= Nothing
-  , operatorMatch "x" ~?= Nothing
-  , operatorMatch "x+" ~?= Nothing
-  , operatorMatch " +" ~?= Nothing
-  , operatorMatch "+x" ~?= Just (Opr Add, "x")
-  , operatorMatch "++" ~?= Just (Opr Add, "+")
-  , functionMatch "" ~?= Nothing
-  , functionMatch " " ~?= Nothing
-  , functionMatch "x" ~?= Nothing
-  , functionMatch "xlog" ~?= Nothing
-  , functionMatch " l o g " ~?= Nothing
-  , functionMatch " log log " ~?= Nothing
-  , functionMatch "logx" ~?= Just (Fun Log, "()x")
-  , functionMatch "log(x)" ~?= Just (Fun Log, "(x)")
-  , functionMatch "loglog" ~?= Just (Fun Log, "()log")
-  , patternMatch "" "" ~?= Just ""
-  , patternMatch "" "x" ~?= Nothing
-  , patternMatch "x" "" ~?= Just "x"
-  , patternMatch "x" "x" ~?= Just ""
-  , patternMatch "x" "xy" ~?= Nothing
-  , patternMatch "xy" "x" ~?= Just "y"
-  , patternMatch "xy" "xy" ~?= Just ""
-  ]
+simplifyTests :: Test
+simplifyTests = TestList
+  [ simplify' "" ~?= Nothing
+  , simplify' "x" ~?= Just "x"
+  , simplify' "-x" ~?= Just "(-1.x)"
+  , simplify' "0 2.3" ~?= Just "0"
+  , simplify' "2.3 0" ~?= Just "0"
+  , simplify' "1 2.3" ~?= Just "(23/10)"
+  , simplify' "2.3 1" ~?= Just "(23/10)"
+  , simplify' "0x" ~?= Just "0"
+  , simplify' "x0" ~?= Just "0"
+  , simplify' "1x" ~?= Just "x"
+  , simplify' "x1" ~?= Just "x"
+  , simplify' "0+2.3" ~?= Just "(23/10)"
+  , simplify' "2.3+0" ~?= Just "(23/10)"
+  , simplify' "0+x" ~?= Just "x"
+  , simplify' "x+0" ~?= Just "x"
+  , simplify' "0-2.3" ~?= Just "neg((23/10))"
+  , simplify' "2.3-0" ~?= Just "(23/10)"
+  , simplify' "0-x" ~?= Just "neg(x)"
+  , simplify' "x-0" ~?= Just "x"
+  , simplify' "0*2.3" ~?= Just "0"
+  , simplify' "2.3*0" ~?= Just "0"
+  , simplify' "1*2.3" ~?= Just "(23/10)"
+  , simplify' "2.3*1" ~?= Just "(23/10)"
+  , simplify' "0*x" ~?= Just "0"
+  , simplify' "x*0" ~?= Just "0"
+  , simplify' "1*x" ~?= Just "x"
+  , simplify' "x*1" ~?= Just "x"
+  , simplify' "0/0" ~?= Nothing
+  , simplify' "0/2.3" ~?= Just "0"
+  , simplify' "2.3/0" ~?= Nothing
+  , simplify' "1/2.3" ~?= Just "(10/23)"
+  , simplify' "2.3/1" ~?= Just "(23/10)"
+  , simplify' "0/x" ~?= Just "0"
+  , simplify' "x/0" ~?= Nothing
+  , simplify' "1/x" ~?= Just "(1/x)"
+  , simplify' "x/1" ~?= Just "x"
+  , simplify' "0^0" ~?= Nothing
+  , simplify' "0^2.3" ~?= Just "0"
+  , simplify' "2.3^0" ~?= Just "1"
+  , simplify' "1^2.3" ~?= Just "1"
+  , simplify' "2.3^1" ~?= Just "(23/10)"
+  , simplify' "0^x" ~?= Just "0"
+  , simplify' "x^0" ~?= Just "1"
+  , simplify' "1^x" ~?= Just "1"
+  , simplify' "x^1" ~?= Just "x"
+  , simplify' "0(2.3)" ~?= Just "0"
+  , simplify' "(0)2.3" ~?= Just "0"
+  , simplify' "2.3(0)" ~?= Just "0"
+  , simplify' "(2.3)0" ~?= Just "0"
+  , simplify' "1(2.3)" ~?= Just "(23/10)"
+  , simplify' "(1)2.3" ~?= Just "(23/10)"
+  , simplify' "2.3(1)" ~?= Just "(23/10)"
+  , simplify' "(2.3)1" ~?= Just "(23/10)"
+  , simplify' "0.x" ~?= Just "0"
+  , simplify' "x.0" ~?= Just "0"
+  , simplify' "1.x" ~?= Just "x"
+  , simplify' "x.1" ~?= Just "x"
+  , simplify' "2*3+x" ~?= Just "(6+x)"
+  , simplify' "x+2*3" ~?= Just "(x+6)"
+  , simplify' "2+3*x" ~?= Just "(2+(3*x))"
+  , simplify' "x*2+3" ~?= Just "((x*2)+3)"
+  , simplify' "2/3-x" ~?= Just "((2/3)-x)"
+  , simplify' "x-2/3" ~?= Just "(x-(2/3))"
+  , simplify' "2-3/x" ~?= Just "(2-(3/x))"
+  , simplify' "x/2-3" ~?= Just "((x/2)-3)" ]
 
 --------------------------------------------------------------------------------
 
@@ -333,4 +302,110 @@ parserTests = TestList
   , popArguments 2 "" [Num (Z 1)] ~?= Nothing
   , popArguments 2 "" (map (Num . Z) [1 .. 2]) ~?= Just ([Val (Z 1), Val (Z 2)], [])
   , popArguments 2 "" (map (Num . Z) [1 .. 4]) ~?= Just ([Val (Z 1), Val (Z 2)], [Num (Z 3), Num (Z 4)])
+  ]
+
+--------------------------------------------------------------------------------
+
+lexerTests :: Test
+lexerTests = TestList
+  [ lexEqn " " ~?= Nothing
+  , lexEqn "=" ~?= Nothing
+  , lexEqn "x=" ~?= Nothing
+  , lexEqn "=x" ~?= Nothing
+  , lexEqn "==" ~?= Nothing
+  , lexEqn "x==" ~?= Nothing
+  , lexEqn "=x=" ~?= Nothing
+  , lexEqn "==x" ~?= Nothing
+  , lexEqn "x=x=" ~?= Nothing
+  , lexEqn "x==x" ~?= Nothing
+  , lexEqn "=x=x" ~?= Nothing
+  , lexEqn "x=x=x" ~?= Nothing
+  , lexEqn "===" ~?= Nothing
+  , lexEqn "x===" ~?= Nothing
+  , lexEqn "=x==" ~?= Nothing
+  , lexEqn "==x=" ~?= Nothing
+  , lexEqn "===x" ~?= Nothing
+  , lexEqn "x=x==" ~?= Nothing
+  , lexEqn "x==x=" ~?= Nothing
+  , lexEqn "x===x" ~?= Nothing
+  , lexEqn "=x=x=" ~?= Nothing
+  , lexEqn "=x==x" ~?= Nothing
+  , lexEqn "==x=x" ~?= Nothing
+  , lexEqn "x=x=x=" ~?= Nothing
+  , lexEqn "x=x==x" ~?= Nothing
+  , lexEqn "x==x=x" ~?= Nothing
+  , lexEqn "=x=x=x" ~?= Nothing
+  , lexEqn "x=x=x=x" ~?= Nothing
+  , lexEqn "x=y" ~?= Just ([Chr 'x'], [Chr 'y'])
+  , lexEqn " x = y " ~?= Just ([Chr 'x'], [Chr 'y'])
+  , lexEqn "-x=-y" ~?= Just ([Num (Z (-1)), Opr Jux, Chr 'x'], [Num (Z (-1)), Opr Jux, Chr 'y'])
+  , lexEqn " - x = - y " ~?= Just ([Num (Z (-1)), Opr Jux, Chr 'x'], [Num (Z (-1)), Opr Jux, Chr 'y'])
+  , lexExp'' "1" ~?= Just [Num (Z 1)]
+  , lexExp'' "1.2" ~?= Just [Num (Q 6 5)]
+  , lexExp'' "1 2" ~?= Just [Num (Z 1), Opr Jux, Num (Z 2)]
+  , lexExp'' "1.2 3.4" ~?= Just [Num (Q 6 5), Opr Jux, Num (Q 17 5)]
+  , lexExp'' "x" ~?= Just [Chr 'x']
+  , lexExp'' "xy" ~?= Just [Chr 'x', Opr Jux, Chr 'y']
+  , lexExp'' "x y" ~?= Just [Chr 'x', Opr Jux, Chr 'y']
+  , lexExp'' "1.2x" ~?= Just [Num (Q 6 5), Opr Jux, Chr 'x']
+  , lexExp'' "x1.2" ~?= Just [Chr 'x', Opr Jux, Num (Q 6 5)]
+  , lexExp'' "+*^" ~?= Just [Opr Add, Opr Mul, Opr Exp]
+  , lexExp'' "log" ~?= Just [Fun Log, Opn, Cls]
+  , lexExp'' "1.2log" ~?= Just [Num (Q 6 5), Opr Jux, Fun Log, Opn, Cls]
+  , lexExp'' "log1.2" ~?= Just [Fun Log, Opn, Cls, Opr Jux, Num (Q 6 5)]
+  , lexExp'' "xlog" ~?= Just [Chr 'x', Opr Jux, Fun Log, Opn, Cls]
+  , lexExp'' "logx" ~?= Just [Fun Log, Opn, Cls, Opr Jux, Chr 'x']
+  , lexExp'' "(,)" ~?= Just [Opn, Sep, Cls]
+  , lexExp'' "1.2(" ~?= Just [Num (Q 6 5), Opr Jux, Opn]
+  , lexExp'' "x(" ~?= Just [Chr 'x', Opr Jux, Opn]
+  , lexExp'' ")(" ~?= Just [Cls, Opr Jux, Opn]
+  , lexExp'' "-2.3" ~?= Just [Num (Z (-1)), Opr Jux, Num (Q 23 10)]
+  , lexExp'' "1-2.3" ~?= Just [Num (Z 1), Opr Sub, Num (Q 23 10)]
+  , lexExp'' "x-2.3" ~?= Just [Chr 'x', Opr Sub, Num (Q 23 10)]
+  , lexExp'' "+-2.3" ~?= Just [Opr Add, Num (Z (-1)), Opr Jux, Num (Q 23 10)]
+  , lexExp'' "log-2.3" ~?= Just [Fun Log, Opn, Cls, Opr Sub, Num (Q 23 10)]
+  , lexExp'' "log()-2.3" ~?= Just [Fun Log, Opn, Cls, Opr Sub, Num (Q 23 10)]
+  , lexExp'' ",-2.3" ~?= Just [Sep, Num (Z (-1)), Opr Jux, Num (Q 23 10)]
+  , lexExp'' "(-2.3" ~?= Just [Opn, Num (Z (-1)), Opr Jux, Num (Q 23 10)]
+  , lexExp'' ")-2.3" ~?= Just [Cls, Opr Sub, Num (Q 23 10)]
+  , matchNum "" ~?= Nothing
+  , matchNum " " ~?= Nothing
+  , matchNum "x" ~?= Nothing
+  , matchNum "x1" ~?= Nothing
+  , matchNum "1" ~?= Just (Num (Z 1), "")
+  , matchNum "1.2" ~?= Just (Num (Q 6 5), "")
+  , matchNum "1+" ~?= Just (Num (Z 1), "+")
+  , matchNum "1.2+" ~?= Just (Num (Q 6 5), "+")
+  , matchNum "1.2.3" ~?= Just (Num (Q 6 5), ".3")
+  , matchNum " 1 .2" ~?= Just (Num (Z 1), " .2")
+  , matchChr "" ~?= Nothing
+  , matchChr " " ~?= Nothing
+  , matchChr " x" ~?= Nothing
+  , matchChr "1" ~?= Nothing
+  , matchChr "1x" ~?= Nothing
+  , matchChr "x" ~?= Just (Chr 'x', "")
+  , matchChr "x1" ~?= Just (Chr 'x', "1")
+  , matchOpr "" ~?= Nothing
+  , matchOpr " " ~?= Nothing
+  , matchOpr "x" ~?= Nothing
+  , matchOpr "x+" ~?= Nothing
+  , matchOpr " +" ~?= Nothing
+  , matchOpr "+x" ~?= Just (Opr Add, "x")
+  , matchOpr "++" ~?= Just (Opr Add, "+")
+  , matchFun "" ~?= Nothing
+  , matchFun " " ~?= Nothing
+  , matchFun "x" ~?= Nothing
+  , matchFun "xlog" ~?= Nothing
+  , matchFun " l o g " ~?= Nothing
+  , matchFun " log log " ~?= Nothing
+  , matchFun "logx" ~?= Just (Fun Log, "()x")
+  , matchFun "log(x)" ~?= Just (Fun Log, "(x)")
+  , matchFun "loglog" ~?= Just (Fun Log, "()log")
+  , matchPattern "" "" ~?= Just ""
+  , matchPattern "" "x" ~?= Nothing
+  , matchPattern "x" "" ~?= Just "x"
+  , matchPattern "x" "x" ~?= Just ""
+  , matchPattern "x" "xy" ~?= Nothing
+  , matchPattern "xy" "x" ~?= Just "y"
+  , matchPattern "xy" "xy" ~?= Just ""
   ]
