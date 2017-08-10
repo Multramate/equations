@@ -1,46 +1,39 @@
 module Solver where
 
+import Control.Monad (liftM2)
+
 import Equation
 
 --------------------------------------------------------------------------------
 
--- Solves a linear equation
-solve :: Equation -> Maybe Equation
-solve (Eqn exp exp') = Eqn <$> simplify exp <*> simplify exp'
-
---------------------------------------------------------------------------------
-
--- Simplifies an expression
-simplify :: Expression -> Maybe Expression
-simplify (Bin Add exp exp')
-  | exp == Val (Z 0) = simplify exp'
-  | exp' == Val (Z 0) = simplify exp
-simplify (Bin Sub exp exp')
-  | exp == Val (Z 0) = fmap negate (simplify exp')
-  | exp' == Val (Z 0) = simplify exp
-simplify (Bin Mul exp exp')
-  | exp == Val (Z 0) || exp' == Val (Z 0) = Just (Val (Z 0))
-  | exp == Val (Z 1) = simplify exp'
-  | exp' == Val (Z 1) = simplify exp
-simplify (Bin Div exp exp')
-  | exp' == Val (Z 0) = Nothing
-  | exp == Val (Z 0) = Just (Val (Z 0))
-  | exp == Val (Z 1) = fmap recip (simplify exp')
-  | exp' == Val (Z 1) = simplify exp
-simplify (Bin Exp exp exp')
-  | exp == Val (Z 0) && exp' == Val (Z 0) = Nothing
-  | exp == Val (Z 1) = Just (Val (Z 1))
-  | exp == Val (Z 0) = Just (Val (Z 0))
-  | exp' == Val (Z 1) = simplify exp
-  | exp' == Val (Z 0) = Just (Val (Z 1))
-simplify (Bin Jux exp exp')
-  | exp == Val (Z 0) || exp' == Val (Z 0) = Just (Val (Z 0))
-  | exp == Val (Z 1) = simplify exp'
-  | exp' == Val (Z 1) = simplify exp
-simplify (Bin opr exp exp') = case Bin opr <$> simplify exp <*> simplify exp' of
+-- Evaluates an expression to its simplest form
+evaluate :: Expression -> Maybe Expression
+evaluate (Bin opr exp exp') = case exp'' of
+  Just (Bin Div _ 0) -> Nothing
+  Just (Bin Exp 0 0) -> Nothing
   Just (Bin opr (Val val) (Val val')) -> Just (Val val'')
     where
       val'' = getBinaryOperation opr val val'
-  Just exp -> Just exp
+  _ -> exp''
+  where
+    exp'' = liftM2 (Bin opr) (evaluate exp) (evaluate exp')
+evaluate (App fun exps) = case exp of
+  Just (App fun exps') -> if all isValue exps' then exp' else exp
+    where
+      exp' = fmap (Val . getFunctionApplication fun) (mapM getNumeric exps')
   _ -> Nothing
-simplify exp = Just exp
+  where
+    exp = fmap (App fun) (mapM evaluate exps)
+evaluate exp = Just exp
+
+--------------------------------------------------------------------------------
+
+-- Checks if an expression is a value
+isValue :: Expression -> Bool
+isValue (Val _) = True
+isValue _ = False
+
+-- Gets the numeric of a value expression
+getNumeric :: Expression -> Maybe Numeric
+getNumeric (Val val) = Just val
+getNumeric _ = Nothing

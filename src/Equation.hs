@@ -15,6 +15,7 @@ type Precedence = Int
 type Associativity = Bool
 type Arity = Int
 type BinaryOperation = Numeric -> Numeric -> Numeric
+type FunctionApplication = [Numeric] -> Numeric
 
 -- Lexer types
 type Input = String
@@ -50,7 +51,7 @@ data Token = Num Numeric -- Numeric
 data Expression = Val Numeric -- Value
                 | Con Char -- Constant
                 | Var Char -- Variable
-                | Bin Operator Expression Expression -- Binary Operator
+                | Bin Operator Expression Expression -- Binary Operation
                 | App Function [Expression] -- Function Application
                 deriving (Eq, Show)
 
@@ -73,7 +74,6 @@ instance Floating Expression where
 -- Makes expression an instance of fractional
 instance Fractional Expression where
   fromRational = Val . toQ . fromRational
-  recip (Val val) = Val (recip val)
   recip exp = Bin Div (Val (Z 1)) exp
 
 -- Makes expression an instance of num
@@ -223,31 +223,45 @@ data Function = Log -- Logarithm
 
 -- Gets the symbol of a function
 getFunctionSymbol :: Function -> Symbol
-getFunctionSymbol = fst . fromJust . flip lookup functionTable
+getFunctionSymbol = fst . lookupFunction
 
 -- Gets the arity of a function
 getArity :: Function -> Arity
-getArity = fst . snd . fromJust . flip lookup functionTable
+getArity = fst . snd . lookupFunction
+
+-- Gets the function application of a function
+getFunctionApplication :: Function -> FunctionApplication
+getFunctionApplication = fst . snd . snd . lookupFunction
 
 -- Looks up a function
-lookupFunction :: Function -> (Symbol, (Arity, ()))
+lookupFunction :: Function -> (Symbol, (Arity, (FunctionApplication, ())))
 lookupFunction = fromJust . flip lookup functionTable
 
 -- A lookup table for functions
-functionTable :: [(Function, (Symbol, (Arity, ())))]
+functionTable :: [(Function, (Symbol, (Arity, (FunctionApplication, ()))))]
 functionTable = map ($ ())
-  [ (,) Log . (,) "log" . (,) 2
-  , (,) Abs . (,) "abs" . (,) 1
-  , (,) Sgn . (,) "sgn" . (,) 1
-  , (,) Neg . (,) "neg" . (,) 1
-  , (,) ASin . (,) "asin" . (,) 1
-  , (,) ACos . (,) "acos" . (,) 1
-  , (,) ATan . (,) "atan" . (,) 1
-  , (,) SinH . (,) "sinh" . (,) 1
-  , (,) CosH . (,) "cosh" . (,) 1
-  , (,) ASinH . (,) "asinh" . (,) 1
-  , (,) ACosH . (,) "acosh" . (,) 1
-  , (,) ATanH . (,) "atanh" . (,) 1 ]
+  [ (,) Log . (,) "log" . (,) 2 . (,) (applyBinary logBase)
+  , (,) Abs . (,) "abs" . (,) 1 . (,) (applyUnary abs)
+  , (,) Sgn . (,) "sgn" . (,) 1 . (,) (applyUnary signum)
+  , (,) Neg . (,) "neg" . (,) 1 . (,) (applyUnary negate)
+  , (,) Sin . (,) "sin" . (,) 1 . (,) (applyUnary sin)
+  , (,) Cos . (,) "cos" . (,) 1 . (,) (applyUnary cos)
+  , (,) ASin . (,) "asin" . (,) 1 . (,) (applyUnary asin)
+  , (,) ACos . (,) "acos" . (,) 1 . (,) (applyUnary acos)
+  , (,) ATan . (,) "atan" . (,) 1 . (,) (applyUnary atan)
+  , (,) SinH . (,) "sinh" . (,) 1 . (,) (applyUnary sinh)
+  , (,) CosH . (,) "cosh" . (,) 1 . (,) (applyUnary cosh)
+  , (,) ASinH . (,) "asinh" . (,) 1 . (,) (applyUnary asinh)
+  , (,) ACosH . (,) "acosh" . (,) 1 . (,) (applyUnary acosh)
+  , (,) ATanH . (,) "atanh" . (,) 1 . (,) (applyUnary atanh) ]
+
+-- Applies a unary function on a list of numerics
+applyUnary :: (Numeric -> Numeric) -> [Numeric] -> Numeric
+applyUnary = (. head)
+
+-- Applies a binary function on a list of numerics
+applyBinary :: (Numeric -> Numeric -> Numeric) -> [Numeric] -> Numeric
+applyBinary = flip (<*>) (head . tail) . (. head)
 
 --------------------------------------------------------------------------------
 

@@ -1,5 +1,6 @@
 module Parser where
 
+import Control.Monad (liftM2)
 import Data.Maybe (fromJust)
 import Data.Tuple.Extra (both)
 
@@ -9,7 +10,7 @@ import Equation
 
 -- Parses a tuple of token lists with an environment into an equation
 parseEqn :: Environment -> (Tokens, Tokens) -> Maybe Equation
-parseEqn = (.) (uncurry ((<*>) . (<$>) Eqn)) . both . parseExp
+parseEqn = (.) (uncurry (liftM2 Eqn)) . both . parseExp
 
 -- Parses a token list with an environment into an expression AST
 parseExp :: Environment -> Tokens -> Maybe Expression

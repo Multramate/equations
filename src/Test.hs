@@ -4,8 +4,8 @@ import Test.HUnit ((~?=), Test (TestList), runTestTT)
 
 import Equation
 import Lexer
+import Main
 import Parser
-import Show
 import Solver
 
 --------------------------------------------------------------------------------
@@ -19,84 +19,76 @@ convertRPN' = fmap reverse . (=<<) convertRPN . lexExp''
 convertAST' :: Input -> Maybe Expression
 convertAST' = (=<<) (convertAST []) . (=<<) convertRPN . lexExp''
 
-simplify' :: Input -> Maybe String
-simplify' = (=<<) ((=<<) (fmap showExp . simplify) . parseExp "x") . lexExp''
-
 --------------------------------------------------------------------------------
 
 tests :: Test
 tests = TestList
-  [lexerTests, parserTests, simplifyTests]
+  [lexerTests, parserTests, solverTests]
 
 --------------------------------------------------------------------------------
 
-simplifyTests :: Test
-simplifyTests = TestList
-  [ simplify' "" ~?= Nothing
-  , simplify' "x" ~?= Just "x"
-  , simplify' "-x" ~?= Just "(-1.x)"
-  , simplify' "0 2.3" ~?= Just "0"
-  , simplify' "2.3 0" ~?= Just "0"
-  , simplify' "1 2.3" ~?= Just "(23/10)"
-  , simplify' "2.3 1" ~?= Just "(23/10)"
-  , simplify' "0x" ~?= Just "0"
-  , simplify' "x0" ~?= Just "0"
-  , simplify' "1x" ~?= Just "x"
-  , simplify' "x1" ~?= Just "x"
-  , simplify' "0+2.3" ~?= Just "(23/10)"
-  , simplify' "2.3+0" ~?= Just "(23/10)"
-  , simplify' "0+x" ~?= Just "x"
-  , simplify' "x+0" ~?= Just "x"
-  , simplify' "0-2.3" ~?= Just "neg((23/10))"
-  , simplify' "2.3-0" ~?= Just "(23/10)"
-  , simplify' "0-x" ~?= Just "neg(x)"
-  , simplify' "x-0" ~?= Just "x"
-  , simplify' "0*2.3" ~?= Just "0"
-  , simplify' "2.3*0" ~?= Just "0"
-  , simplify' "1*2.3" ~?= Just "(23/10)"
-  , simplify' "2.3*1" ~?= Just "(23/10)"
-  , simplify' "0*x" ~?= Just "0"
-  , simplify' "x*0" ~?= Just "0"
-  , simplify' "1*x" ~?= Just "x"
-  , simplify' "x*1" ~?= Just "x"
-  , simplify' "0/0" ~?= Nothing
-  , simplify' "0/2.3" ~?= Just "0"
-  , simplify' "2.3/0" ~?= Nothing
-  , simplify' "1/2.3" ~?= Just "(10/23)"
-  , simplify' "2.3/1" ~?= Just "(23/10)"
-  , simplify' "0/x" ~?= Just "0"
-  , simplify' "x/0" ~?= Nothing
-  , simplify' "1/x" ~?= Just "(1/x)"
-  , simplify' "x/1" ~?= Just "x"
-  , simplify' "0^0" ~?= Nothing
-  , simplify' "0^2.3" ~?= Just "0"
-  , simplify' "2.3^0" ~?= Just "1"
-  , simplify' "1^2.3" ~?= Just "1"
-  , simplify' "2.3^1" ~?= Just "(23/10)"
-  , simplify' "0^x" ~?= Just "0"
-  , simplify' "x^0" ~?= Just "1"
-  , simplify' "1^x" ~?= Just "1"
-  , simplify' "x^1" ~?= Just "x"
-  , simplify' "0(2.3)" ~?= Just "0"
-  , simplify' "(0)2.3" ~?= Just "0"
-  , simplify' "2.3(0)" ~?= Just "0"
-  , simplify' "(2.3)0" ~?= Just "0"
-  , simplify' "1(2.3)" ~?= Just "(23/10)"
-  , simplify' "(1)2.3" ~?= Just "(23/10)"
-  , simplify' "2.3(1)" ~?= Just "(23/10)"
-  , simplify' "(2.3)1" ~?= Just "(23/10)"
-  , simplify' "0.x" ~?= Just "0"
-  , simplify' "x.0" ~?= Just "0"
-  , simplify' "1.x" ~?= Just "x"
-  , simplify' "x.1" ~?= Just "x"
-  , simplify' "2*3+x" ~?= Just "(6+x)"
-  , simplify' "x+2*3" ~?= Just "(x+6)"
-  , simplify' "2+3*x" ~?= Just "(2+(3*x))"
-  , simplify' "x*2+3" ~?= Just "((x*2)+3)"
-  , simplify' "2/3-x" ~?= Just "((2/3)-x)"
-  , simplify' "x-2/3" ~?= Just "(x-(2/3))"
-  , simplify' "2-3/x" ~?= Just "(2-(3/x))"
-  , simplify' "x/2-3" ~?= Just "((x/2)-3)" ]
+solverTests :: Test
+solverTests = TestList
+  [ evaluate 1 ~?= Just 1
+  , evaluate 1.2 ~?= Just 1.2
+  , evaluate (Con 'x') ~?= Just (Con 'x')
+  , evaluate (Var 'x') ~?= Just (Var 'x')
+  , evaluate (Bin Add 1.2 3.4) ~?= Just 4.6
+  , evaluate (Bin Sub 1.2 3.4) ~?= Just (Val (1.2-3.4))
+  , evaluate (Bin Mul 1.2 3.4) ~?= Just 4.08
+  , evaluate (Bin Div 1.2 3.4) ~?= Just (Val (1.2/3.4))
+  , evaluate (Bin Add 0 1.2) ~?= Just 1.2
+  , evaluate (Bin Add 1.2 0) ~?= Just 1.2
+  , evaluate (Bin Sub 0 1.2) ~?= Just (Val (-1.2))
+  , evaluate (Bin Sub 1.2 0) ~?= Just 1.2
+  , evaluate (Bin Sub 1.2 1.2) ~?= Just 0
+  , evaluate (Bin Mul 0 1.2) ~?= Just 0
+  , evaluate (Bin Mul 1.2 0) ~?= Just 0
+  , evaluate (Bin Mul 1 1.2) ~?= Just 1.2
+  , evaluate (Bin Mul 1.2 1) ~?= Just 1.2
+  , evaluate (Bin Div 0 1.2) ~?= Just 0
+  , evaluate (Bin Div 1.2 0) ~?= Nothing
+  , evaluate (Bin Div 1 1.2) ~?= Just (Val (1/1.2))
+  , evaluate (Bin Div 1.2 1) ~?= Just 1.2
+  , evaluate (Bin Div 1.2 1.2) ~?= Just 1
+  , evaluate (Bin Exp 0 0) ~?= Nothing
+  , evaluate (Bin Exp 0 1.2) ~?= Just 0
+  , evaluate (Bin Exp 1.2 0) ~?= Just 1
+  , evaluate (Bin Exp 1 1.2) ~?= Just 1
+  , evaluate (Bin Exp 1.2 1) ~?= Just 1.2
+  , evaluate (Bin Add 1 (Bin Add 2 3)) ~?= Just 6
+  , evaluate (Bin Add (Bin Add 1 2) 3) ~?= Just 6
+  , evaluate (Bin Add (Bin Add 1 2) (Bin Add 3 4)) ~?= Just 10
+  , evaluate (Bin Add (Bin Add (Bin Add 1 2) 3) 4) ~?= Just 10
+  , evaluate (Bin Add (Con 'x') (Con 'y')) ~?= Just (Con 'x' + Con 'y')
+  , evaluate (Bin Add 1 (Con 'x')) ~?= Just (1 + Con 'x')
+  , evaluate (Bin Add (Con 'x') 1) ~?= Just (Con 'x' + 1)
+  , evaluate (Bin Add (Var 'x') (Var 'y')) ~?= Just (Var 'x' + Var 'y')
+  , evaluate (Bin Add 1 (Var 'x')) ~?= Just (1 + Var 'x')
+  , evaluate (Bin Add (Var 'x') 1) ~?= Just (Var 'x' + 1)
+  , evaluate (Bin Add (Bin Add 1 2) (Var 'x')) ~?= Just (3 + Var 'x')
+  , evaluate (Bin Add (Var 'x') (Bin Add 1 2)) ~?= Just (Var 'x' + 3)
+  , evaluate (Bin Add 1 (Bin Add (Var 'x') 2)) ~?= Just (1 + (Var 'x' + 2))
+  , evaluate (Bin Add (Bin Add (Var 'x') 1) 2) ~?= Just (Var 'x' + 1 + 2)
+  , evaluate (Bin Add (Bin Add 1 2) (Bin Add (Var 'x') 3)) ~?= Just (3 + (Var 'x' + 3))
+  , evaluate (Bin Add (Bin Add (Var 'x') 3) (Bin Add 1 2)) ~?= Just (Var 'x' + 3 + 3)
+  , evaluate (App Log [2, 4]) ~?= Just 2
+  , evaluate (App Log [1, 0]) ~?= Just (Val (R (-1/0)))
+  , evaluate (App Log [1, 2]) ~?= Just (Val (R (1/0)))
+  , evaluate (App Log [2, Bin Add 1 3]) ~?= Just 2
+  , evaluate (App Log [Bin Add 1 2, 9]) ~?= Just 2
+  , evaluate (App Log [Bin Add 1 2, Bin Add 3 6]) ~?= Just 2
+  , evaluate (App Log [2, App Log [2, 16]]) ~?= Just 2
+  , evaluate (App Log [App Log [2, 4], 4]) ~?= Just 2
+  , evaluate (App Log [App Log [2, 4], App Log [3, 81]]) ~?= Just 2
+  , evaluate (App Log [App Log [2, App Log [3, 81]], 4]) ~?= Just 2
+  , evaluate (App Log [Con 'x', Con 'y']) ~?= Just (App Log [Con 'x', Con 'y'])
+  , evaluate (App Log [2, Con 'x']) ~?= Just (App Log [2, Con 'x'])
+  , evaluate (App Log [Con 'x', 4]) ~?= Just (App Log [Con 'x', 4])
+  , evaluate (App Log [Var 'x', Var 'y']) ~?= Just (App Log [Var 'x', Var 'y'])
+  , evaluate (App Log [2, Var 'x']) ~?= Just (App Log [2, Var 'x'])
+  , evaluate (App Log [Var 'x', 4]) ~?= Just (App Log [Var 'x', 4])
+  , evaluate (App Log [Bin Add (App Log [2, 4]) (App Log [3, 9]), Var 'x']) ~?= Just (App Log [4, Var 'x']) ]
 
 --------------------------------------------------------------------------------
 
@@ -301,8 +293,7 @@ parserTests = TestList
   , popArguments 2 "" [] ~?= Nothing
   , popArguments 2 "" [Num (Z 1)] ~?= Nothing
   , popArguments 2 "" (map (Num . Z) [1 .. 2]) ~?= Just ([Val (Z 1), Val (Z 2)], [])
-  , popArguments 2 "" (map (Num . Z) [1 .. 4]) ~?= Just ([Val (Z 1), Val (Z 2)], [Num (Z 3), Num (Z 4)])
-  ]
+  , popArguments 2 "" (map (Num . Z) [1 .. 4]) ~?= Just ([Val (Z 1), Val (Z 2)], [Num (Z 3), Num (Z 4)]) ]
 
 --------------------------------------------------------------------------------
 
@@ -407,5 +398,4 @@ lexerTests = TestList
   , matchPattern "x" "x" ~?= Just ""
   , matchPattern "x" "xy" ~?= Nothing
   , matchPattern "xy" "x" ~?= Just "y"
-  , matchPattern "xy" "xy" ~?= Just ""
-  ]
+  , matchPattern "xy" "xy" ~?= Just "" ]
