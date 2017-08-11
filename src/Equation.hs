@@ -36,23 +36,23 @@ data Equation = Eqn Expression Expression -- Equation
 --------------------------------------------------------------------------------
 
 -- Token data type for lexer
-data Token = Num Numeric -- Numeric
-           | Chr Char -- Character
+data Token = Num Numeric  -- Numeric
+           | Chr Char     -- Character
            | Opr Operator -- Operator
            | Fun Function -- Function
-           | Sep -- Separator
-           | Opn -- Open brackets
-           | Cls -- Close brackets
+           | Sep          -- Separator
+           | Opn          -- Open brackets
+           | Cls          -- Close brackets
            deriving (Eq, Show)
 
 --------------------------------------------------------------------------------
 
 -- Expression data type for parser
-data Expression = Val Numeric -- Value
-                | Con Char -- Constant
-                | Var Char -- Variable
+data Expression = Val Numeric                        -- Value
+                | Con Char                           -- Constant
+                | Var Char                           -- Variable
                 | Bin Operator Expression Expression -- Binary Operation
-                | App Function [Expression] -- Function Application
+                | App Function [Expression]          -- Function Application
                 deriving (Eq, Show)
 
 -- Makes expression an instance of floating
@@ -85,12 +85,20 @@ instance Num Expression where
   fromInteger = Val . Z . fromIntegral
   negate = App Neg . return
 
+-- Makes expression an instance of ord
+instance Ord Expression where
+  Val val <= Val val' = val <= val'
+  _ <= _ = False
+  _ < _ = False
+  _ >= _ = False
+  _ > _ = False
+
 --------------------------------------------------------------------------------
 
 -- Numeric data type
-data Numeric = Z Int -- Integers
+data Numeric = Z Int     -- Integers
              | Q Int Int -- Rationals
-             | R Double -- Reals
+             | R Double  -- Reals
              deriving Show
 
 -- Makes numeric an instance of eq
@@ -158,6 +166,18 @@ instance Num Numeric where
   negate (Z z) = Z (negate z)
   negate q @ (Q _ _) = toQ (negate (fromQ q))
   negate (R r) = R (negate r)
+  
+-- Makes numeric an instance of ord
+instance Ord Numeric where
+  Z z <= Z z' = z <= z'
+  Z z <= q @ (Q _ _) = fromIntegral z <= fromQ q
+  Z z <= R r = fromIntegral z <= r
+  q @ (Q _ _) <= Z z = fromQ q <= fromIntegral z
+  q @ (Q _ _) <= q' @ (Q _ _) = fromQ q <= fromQ q'
+  q @ (Q _ _) <= R r = fromRational (fromQ q) <= r
+  R r <= Z z = r <= fromIntegral z
+  R r <= q @ (Q _ _) = r <= fromRational (fromQ q)
+  R r <= R r' = r <= r'
 
 --------------------------------------------------------------------------------
 
@@ -205,17 +225,17 @@ operatorTable = map ($ ())
 --------------------------------------------------------------------------------
 
 -- Function enumeration
-data Function = Log -- Logarithm
-              | Abs -- Absolute
-              | Sgn -- Sign
-              | Neg -- Negate
-              | Sin -- Sine
-              | Cos -- Cosine
-              | ASin -- Inverse Sine
-              | ACos -- Inverse Cosine
-              | ATan -- Inverse Tangent
-              | SinH -- Hyperbolic Sine
-              | CosH -- Hyperbolic Cosine
+data Function = Log   -- Logarithm
+              | Abs   -- Absolute
+              | Sgn   -- Sign
+              | Neg   -- Negate
+              | Sin   -- Sine
+              | Cos   -- Cosine
+              | ASin  -- Inverse Sine
+              | ACos  -- Inverse Cosine
+              | ATan  -- Inverse Tangent
+              | SinH  -- Hyperbolic Sine
+              | CosH  -- Hyperbolic Cosine
               | ASinH -- Inverse Hyperbolic Sine
               | ACosH -- Inverse Hyperbolic Cosine
               | ATanH -- Inverse Hyperbolic Tangent

@@ -6,18 +6,22 @@ import Equation
 import Lexer
 import Main
 import Parser
+import Show
 import Solver
 
 --------------------------------------------------------------------------------
 
 lexExp'' :: Input -> Maybe Tokens
-lexExp'' = fmap fst . lexExp
+lexExp'' input = return input >>= fmap fst . lexExp
 
 convertRPN' :: Input -> Maybe TokenQueue
-convertRPN' = fmap reverse . (=<<) convertRPN . lexExp''
+convertRPN' input = return input >>= lexExp'' >>= fmap reverse . convertRPN
 
 convertAST' :: Input -> Maybe Expression
-convertAST' = (=<<) (convertAST []) . (=<<) convertRPN . lexExp''
+convertAST' input = return input >>= lexExp'' >>= convertRPN >>= convertAST []
+
+rewrite' :: Input -> Maybe Expression
+rewrite' input = return input >>= convertAST' >>= rewrite
 
 --------------------------------------------------------------------------------
 
@@ -29,66 +33,150 @@ tests = TestList
 
 solverTests :: Test
 solverTests = TestList
-  [ evaluate 1 ~?= Just 1
-  , evaluate 1.2 ~?= Just 1.2
-  , evaluate (Con 'x') ~?= Just (Con 'x')
-  , evaluate (Var 'x') ~?= Just (Var 'x')
-  , evaluate (Bin Add 1.2 3.4) ~?= Just 4.6
-  , evaluate (Bin Sub 1.2 3.4) ~?= Just (Val (1.2-3.4))
-  , evaluate (Bin Mul 1.2 3.4) ~?= Just 4.08
-  , evaluate (Bin Div 1.2 3.4) ~?= Just (Val (1.2/3.4))
-  , evaluate (Bin Add 0 1.2) ~?= Just 1.2
-  , evaluate (Bin Add 1.2 0) ~?= Just 1.2
-  , evaluate (Bin Sub 0 1.2) ~?= Just (Val (-1.2))
-  , evaluate (Bin Sub 1.2 0) ~?= Just 1.2
-  , evaluate (Bin Sub 1.2 1.2) ~?= Just 0
-  , evaluate (Bin Mul 0 1.2) ~?= Just 0
-  , evaluate (Bin Mul 1.2 0) ~?= Just 0
-  , evaluate (Bin Mul 1 1.2) ~?= Just 1.2
-  , evaluate (Bin Mul 1.2 1) ~?= Just 1.2
-  , evaluate (Bin Div 0 1.2) ~?= Just 0
-  , evaluate (Bin Div 1.2 0) ~?= Nothing
-  , evaluate (Bin Div 1 1.2) ~?= Just (Val (1/1.2))
-  , evaluate (Bin Div 1.2 1) ~?= Just 1.2
-  , evaluate (Bin Div 1.2 1.2) ~?= Just 1
-  , evaluate (Bin Exp 0 0) ~?= Nothing
-  , evaluate (Bin Exp 0 1.2) ~?= Just 0
-  , evaluate (Bin Exp 1.2 0) ~?= Just 1
-  , evaluate (Bin Exp 1 1.2) ~?= Just 1
-  , evaluate (Bin Exp 1.2 1) ~?= Just 1.2
-  , evaluate (Bin Add 1 (Bin Add 2 3)) ~?= Just 6
-  , evaluate (Bin Add (Bin Add 1 2) 3) ~?= Just 6
-  , evaluate (Bin Add (Bin Add 1 2) (Bin Add 3 4)) ~?= Just 10
-  , evaluate (Bin Add (Bin Add (Bin Add 1 2) 3) 4) ~?= Just 10
-  , evaluate (Bin Add (Con 'x') (Con 'y')) ~?= Just (Con 'x' + Con 'y')
-  , evaluate (Bin Add 1 (Con 'x')) ~?= Just (1 + Con 'x')
-  , evaluate (Bin Add (Con 'x') 1) ~?= Just (Con 'x' + 1)
-  , evaluate (Bin Add (Var 'x') (Var 'y')) ~?= Just (Var 'x' + Var 'y')
-  , evaluate (Bin Add 1 (Var 'x')) ~?= Just (1 + Var 'x')
-  , evaluate (Bin Add (Var 'x') 1) ~?= Just (Var 'x' + 1)
-  , evaluate (Bin Add (Bin Add 1 2) (Var 'x')) ~?= Just (3 + Var 'x')
-  , evaluate (Bin Add (Var 'x') (Bin Add 1 2)) ~?= Just (Var 'x' + 3)
-  , evaluate (Bin Add 1 (Bin Add (Var 'x') 2)) ~?= Just (1 + (Var 'x' + 2))
-  , evaluate (Bin Add (Bin Add (Var 'x') 1) 2) ~?= Just (Var 'x' + 1 + 2)
-  , evaluate (Bin Add (Bin Add 1 2) (Bin Add (Var 'x') 3)) ~?= Just (3 + (Var 'x' + 3))
-  , evaluate (Bin Add (Bin Add (Var 'x') 3) (Bin Add 1 2)) ~?= Just (Var 'x' + 3 + 3)
-  , evaluate (App Log [2, 4]) ~?= Just 2
-  , evaluate (App Log [1, 0]) ~?= Just (Val (R (-1/0)))
-  , evaluate (App Log [1, 2]) ~?= Just (Val (R (1/0)))
-  , evaluate (App Log [2, Bin Add 1 3]) ~?= Just 2
-  , evaluate (App Log [Bin Add 1 2, 9]) ~?= Just 2
-  , evaluate (App Log [Bin Add 1 2, Bin Add 3 6]) ~?= Just 2
-  , evaluate (App Log [2, App Log [2, 16]]) ~?= Just 2
-  , evaluate (App Log [App Log [2, 4], 4]) ~?= Just 2
-  , evaluate (App Log [App Log [2, 4], App Log [3, 81]]) ~?= Just 2
-  , evaluate (App Log [App Log [2, App Log [3, 81]], 4]) ~?= Just 2
-  , evaluate (App Log [Con 'x', Con 'y']) ~?= Just (App Log [Con 'x', Con 'y'])
-  , evaluate (App Log [2, Con 'x']) ~?= Just (App Log [2, Con 'x'])
-  , evaluate (App Log [Con 'x', 4]) ~?= Just (App Log [Con 'x', 4])
-  , evaluate (App Log [Var 'x', Var 'y']) ~?= Just (App Log [Var 'x', Var 'y'])
-  , evaluate (App Log [2, Var 'x']) ~?= Just (App Log [2, Var 'x'])
-  , evaluate (App Log [Var 'x', 4]) ~?= Just (App Log [Var 'x', 4])
-  , evaluate (App Log [Bin Add (App Log [2, 4]) (App Log [3, 9]), Var 'x']) ~?= Just (App Log [4, Var 'x']) ]
+  [ rewrite' "" ~?= Nothing
+  , rewrite' "2.3" ~?= Just 2.3
+  , rewrite' "-2.3" ~?= Just (Val (Q (-23) 10))
+  , rewrite' "x" ~?= Just (Con 'x')
+  , rewrite' "-x" ~?= Just (-Con 'x')
+  , rewrite' "0+0" ~?= Just 0
+  , rewrite' "0+2.3" ~?= Just 2.3
+  , rewrite' "2.3+0" ~?= Just 2.3
+  , rewrite' "-2.3+2.3" ~?= Just 0
+  , rewrite' "2.3+-2.3" ~?= Just 0
+  , rewrite' "1.2+3.4" ~?= Just (Val (1.2 + 3.4))
+  , rewrite' "0+x" ~?= Just (Con 'x')
+  , rewrite' "x+0" ~?= Just (Con 'x')
+  , rewrite' "-x+x" ~?= Just 0
+  , rewrite' "x+-x" ~?= Just 0
+  , rewrite' "x+y" ~?= Just (Bin Add (Con 'x') (Con 'y'))
+  , rewrite' "0-0" ~?= Just 0
+  , rewrite' "0-2.3" ~?= Just (Val (Q (-23) 10))
+  , rewrite' "2.3-0" ~?= Just 2.3
+  , rewrite' "2.3-2.3" ~?= Just 0
+  , rewrite' "1.2-3.4" ~?= Just (Val (1.2 - 3.4))
+  , rewrite' "0-x" ~?= Just (-Con 'x')
+  , rewrite' "x-0" ~?= Just (Con 'x')
+  , rewrite' "x-x" ~?= Just 0
+  , rewrite' "x-y" ~?= Just (Bin Sub (Con 'x') (Con 'y'))
+  , rewrite' "0*0" ~?= Just 0
+  , rewrite' "0*2.3" ~?= Just 0
+  , rewrite' "2.3*0" ~?= Just 0
+  , rewrite' "1*2.3" ~?= Just 2.3
+  , rewrite' "2.3*1" ~?= Just 2.3
+  , rewrite' "-1*2.3" ~?= Just (Val (Q (-23) 10))
+  , rewrite' "2.3*-1" ~?= Just (Val (Q (-23) 10))
+  , rewrite' "(1/2.3)*2.3" ~?= Just 1
+  , rewrite' "2.3*(1/2.3)" ~?= Just 1
+  , rewrite' "1.2*3.4" ~?= Just (Val (1.2 * 3.4))
+  , rewrite' "0*x" ~?= Just 0
+  , rewrite' "x*0" ~?= Just 0
+  , rewrite' "1*x" ~?= Just (Con 'x')
+  , rewrite' "x*1" ~?= Just (Con 'x')
+  , rewrite' "-1*x" ~?= Just (-Con 'x')
+  , rewrite' "x*-1" ~?= Just (-Con 'x')
+  , rewrite' "(1/x)*x" ~?= Just 1
+  , rewrite' "x*(1/x)" ~?= Just 1
+  , rewrite' "x*y" ~?= Just (Bin Mul (Con 'x') (Con 'y'))
+  , rewrite' "0/0" ~?= Nothing
+  , rewrite' "0/2.3" ~?= Just 0
+  , rewrite' "2.3/0" ~?= Nothing
+  , rewrite' "1/2.3" ~?= Just (Val (Q 10 23))
+  , rewrite' "2.3/1" ~?= Just 2.3
+  , rewrite' "2.3/2.3" ~?= Just 1
+  , rewrite' "-1/2.3" ~?= Just (Val (Q (-10) 23))
+  , rewrite' "2.3/-1" ~?= Just (Val (Q (-23) 10))
+  , rewrite' "1.2/3.4" ~?= Just (Val (1.2 / 3.4))
+  , rewrite' "0/x" ~?= Just 0
+  , rewrite' "x/0" ~?= Nothing
+  , rewrite' "1/x" ~?= Just (recip (Con 'x'))
+  , rewrite' "x/1" ~?= Just (Con 'x')
+  , rewrite' "x/x" ~?= Just 1
+  , rewrite' "-1/x" ~?= Just (-recip (Con 'x'))
+  , rewrite' "x/-1" ~?= Just (-Con 'x')
+  , rewrite' "x/y" ~?= Just (Bin Div (Con 'x') (Con 'y'))
+  , rewrite' "0^0" ~?= Nothing
+  , rewrite' "-2.3^0" ~?= Nothing
+  , rewrite' "0^2.3" ~?= Just 0
+  , rewrite' "2.3^0" ~?= Just 1
+  , rewrite' "1^2.3" ~?= Just 1
+  , rewrite' "2.3^1" ~?= Just 2.3
+  , rewrite' "2.3^-1" ~?= Just (Val (Q 10 23))
+  , rewrite' "-2.3^1" ~?= Nothing
+  , rewrite' "-1.2^3.4" ~?= Nothing
+  , rewrite' "1.2^3.4" ~?= Just (Val (R (1.2 ** 3.4)))
+  , rewrite' "0^x" ~?= Just 0
+  , rewrite' "x^0" ~?= Just 1
+  , rewrite' "1^x" ~?= Just 1
+  , rewrite' "x^1" ~?= Just (Con 'x')
+  , rewrite' "x^-1" ~?= Just (recip (Con 'x'))
+  , rewrite' "-2.3^x" ~?= Nothing
+  , rewrite' "x^x" ~?= Just (Bin Exp (Con 'x') (Con 'x'))
+  , rewrite' "0 2.3" ~?= Just 0
+  , rewrite' "2.3 0" ~?= Just 0
+  , rewrite' "1 2.3" ~?= Just 2.3
+  , rewrite' "2.3 1" ~?= Just 2.3
+  , rewrite' "-1 2.3" ~?= Just (Val (Q (-23) 10))
+  , rewrite' "2.3 (-1)" ~?= Just (Val (Q (-23) 10))
+  , rewrite' "(1/2.3) 2.3" ~?= Just 1
+  , rewrite' "2.3 (1/2.3)" ~?= Just 1
+  , rewrite' "1.2 3.4" ~?= Just (Val (1.2 * 3.4))
+  , rewrite' "0x" ~?= Just 0
+  , rewrite' "x0" ~?= Just 0
+  , rewrite' "1x" ~?= Just (Con 'x')
+  , rewrite' "x1" ~?= Just (Con 'x')
+  , rewrite' "-1x" ~?= Just (-Con 'x')
+  , rewrite' "x(-1)" ~?= Just (-Con 'x')
+  , rewrite' "(1/x)x" ~?= Just 1
+  , rewrite' "x(1/x)" ~?= Just 1
+  , rewrite' "xy" ~?= Just (Bin Jux (Con 'x') (Con 'y'))
+  , rewrite' "1+x" ~?= Just (1 + Con 'x')
+  , rewrite' "x+1" ~?= Just (Con 'x' + 1)
+  , rewrite' "1+(2+3)" ~?= Just 6
+  , rewrite' "(1+2)+3" ~?= Just 6
+  , rewrite' "(1+2)+(3+4)" ~?= Just 10
+  , rewrite' "((1+2)+3)+4" ~?= Just 10
+  , rewrite' "(1+2)+x" ~?= Just (3 + Con 'x')
+  , rewrite' "x+(1+2)" ~?= Just (Con 'x' + 3)
+  , rewrite' "1+(x+2)" ~?= Just (1 + (Con 'x' + 2))
+  , rewrite' "(x+1)+2" ~?= Just (Con 'x' + 1 + 2)
+  , rewrite' "(1+2)+(x+3)" ~?= Just (3 + (Con 'x' + 3))
+  , rewrite' "(x+1)+(2+3)" ~?= Just (Con 'x' + 1 + 5)
+  , rewrite' "1+(2+(3+x))" ~?= Just (1 + (2 + (3 + Con 'x')))
+  , rewrite' "((x+1)+2)+3" ~?= Just (Con 'x' + 1 + 2 + 3)
+  , rewrite' "log(0,0)" ~?= Nothing
+  , rewrite' "log(0,4)" ~?= Nothing
+  , rewrite' "log(2,0)" ~?= Nothing
+  , rewrite' "log(0,x)" ~?= Nothing
+  , rewrite' "log(x,0)" ~?= Nothing
+  , rewrite' "log(-1,-1)" ~?= Nothing
+  , rewrite' "log(0,-1)" ~?= Nothing
+  , rewrite' "log(-1,0)" ~?= Nothing
+  , rewrite' "log(2,-1)" ~?= Nothing
+  , rewrite' "log(-1,4)" ~?= Nothing
+  , rewrite' "log(x,-1)" ~?= Nothing
+  , rewrite' "log(-1,x)" ~?= Nothing
+  , rewrite' "log(1,1)" ~?= Nothing
+  , rewrite' "log(0,1)" ~?= Nothing
+  , rewrite' "log(1,0)" ~?= Nothing
+  , rewrite' "log(-1,1)" ~?= Nothing
+  , rewrite' "log(1,-1)" ~?= Nothing
+  , rewrite' "log(1,4)" ~?= Nothing
+  , rewrite' "log(1,x)" ~?= Nothing
+  , rewrite' "log(2,2)" ~?= Just 1
+  , rewrite' "log(2,1)" ~?= Just 0
+  , rewrite' "log(x,1)" ~?= Just 0
+  , rewrite' "log(x,x)" ~?= Just 1
+  , rewrite' "log(2,1+3)" ~?= Just 2
+  , rewrite' "log(1+2,9)" ~?= Just 2
+  , rewrite' "log(1+2,3+6)" ~?= Just 2
+  , rewrite' "log(2,log(2,16))" ~?= Just 2
+  , rewrite' "log(log(2,4),4)" ~?= Just 2
+  , rewrite' "log(log(2,4),log(3,81))" ~?= Just 2
+  , rewrite' "log(1+2,log(3,19683))" ~?= Just 2
+  , rewrite' "log(log(2,4),3+1)" ~?= Just 2
+  , rewrite' "log(log(log(2,4),4),4)" ~?= Just 2
+  , rewrite' "log(2,log(2,log(2,65536)))" ~?= Just 2
+  , rewrite' "log(log(2,log(3,40+41)),log(log(4,2^4),4*4))" ~?= Just 2 ]
 
 --------------------------------------------------------------------------------
 
