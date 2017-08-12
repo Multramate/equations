@@ -1,4 +1,4 @@
-module Parser where
+module Parse where
 
 import Control.Monad (liftM2)
 import Data.Maybe (fromJust)
@@ -16,19 +16,19 @@ parseEqn = (.) (uncurry (liftM2 Eqn)) . both . parseExp
 parseExp :: Environment -> Tokens -> Maybe Expression
 parseExp env toks = convertRPN toks >>= convertAST env
 
--- Converts a tokens list into a RPN token queue
+-- Converts a token list into a RPN token queue
 convertRPN :: Tokens -> Maybe TokenQueue
 convertRPN = shuntingYard [] []
 
 -- Converts a RPN token queue with an environment into an expression AST
 convertAST :: Environment -> TokenQueue -> Maybe Expression
 convertAST env queue = case postfixTree env queue of
-  Just (exp, []) -> Just exp
+  Just (exp, []) -> return exp
   _ -> Nothing
 
 --------------------------------------------------------------------------------
 
--- Run the Shunting Yard algorithm on a Tokens list
+-- Run the Shunting Yard algorithm on a tokens list
 shuntingYard :: TokenQueue -> TokenStack -> Tokens -> Maybe TokenQueue
 shuntingYard queue stack toks' @ (tok : toks) = case tok of
   Opr opr -> case stack of
@@ -51,40 +51,42 @@ shuntingYard queue stack toks' @ (tok : toks) = case tok of
 shuntingYard queue stack _ = case stack of
   Opn : stack' -> Nothing
   tok : stack' -> shuntingYard (tok : queue) stack' []
-  _ -> Just queue
+  _ -> return queue
 
 -- Checks if an operator does not precede another operator
 notPrecedes :: Operator -> Operator -> Bool
-notPrecedes opr opr' = less < more || less == more && left
+notPrecedes opr opr' = precedence < precedence' || precedence == precedence'
+  && (associativity == LeftAssoc || associativity == BothAssoc)
   where
-    less = getPrecedence opr
-    more = getPrecedence opr'
-    left = getAssociativity opr
+    precedence = getPrecedence opr
+    precedence' = getPrecedence opr'
+    associativity = getAssociativity opr
 
 --------------------------------------------------------------------------------
 
 -- Runs the postfix tree conversion algorithm on a token queue recursively
 postfixTree :: Environment -> TokenQueue -> Maybe (Expression, TokenQueue)
 postfixTree _ (Num num : queue)
-  = Just (Val num, queue)
+  = return (Val num, queue)
 postfixTree env (Chr chr : queue)
-  = Just ((if elem chr env then Var else Con) chr, queue)
+  = return ((if elem chr env then Var else Con) chr, queue)
 postfixTree env (Opr opr : queue)
   = case popArguments 2 env queue of
-  Just ([exp, exp'], queue') -> Just (Bin opr exp' exp, queue')
-  Nothing -> Nothing
+  Just ([exp, exp'], queue') -> return (Bin opr exp' exp, queue')
+  _ -> Nothing
 postfixTree env (Fun fun : queue)
   = case popArguments (getArity fun) env queue of
-  Just (exps, queue') -> Just (App fun (reverse exps), queue')
-  Nothing -> Nothing
-postfixTree _ _ = Nothing
+  Just (exps, queue') -> return (App fun (reverse exps), queue')
+  _ -> Nothing
+postfixTree _ _
+  = Nothing
 
 -- Pops an arity number of arguments from a token queue recursively
 popArguments :: Arity -> Environment -> TokenQueue
   -> Maybe (ExpressionStack, TokenQueue)
-popArguments 0 _ queue = Just ([], queue)
+popArguments 0 _ queue = return ([], queue)
 popArguments arity env queue = case postfixTree env queue of
   Just (exp, queue') -> case popArguments (pred arity) env queue' of
-    Just (exps, queue'') -> Just (exp : exps, queue'')
+    Just (exps, queue'') -> return (exp : exps, queue'')
     _ -> Nothing
   _ -> Nothing

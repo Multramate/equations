@@ -12,7 +12,10 @@ type LHS = [Token]
 type RHS = [Token]
 type Symbol = String
 type Precedence = Int
-type Associativity = Bool
+data Associativity = LeftAssoc
+                   | BothAssoc
+                   | RightAssoc
+                   deriving Eq
 type Arity = Int
 type BinaryOperation = Numeric -> Numeric -> Numeric
 type FunctionApplication = [Numeric] -> Numeric
@@ -74,7 +77,7 @@ instance Floating Expression where
 -- Makes expression an instance of fractional
 instance Fractional Expression where
   fromRational = Val . toQ . fromRational
-  recip exp = Bin Div (Val (Z 1)) exp
+  recip = App Rcp . return
 
 -- Makes expression an instance of num
 instance Num Expression where
@@ -215,20 +218,21 @@ lookupOperator = fromJust . flip lookup operatorTable
 operatorTable :: [(Operator, (Symbol,
   (Precedence, (Associativity, (BinaryOperation, ())))))]
 operatorTable = map ($ ())
-  [ (,) Add . (,) "+" . (,) 6 . (,) True . (,) (+)
-  , (,) Sub . (,) "-" . (,) 6 . (,) True . (,) (-)
-  , (,) Mul . (,) "*" . (,) 7 . (,) True . (,) (*)
-  , (,) Div . (,) "/" . (,) 7 . (,) True . (,) (/)
-  , (,) Exp . (,) "^" . (,) 8 . (,) False . (,) (.^.)
-  , (,) Jux . (,) "." . (,) 10 . (,) True . (,) (*) ]
+  [ (,) Add . (,) "+" . (,) 6 . (,) BothAssoc . (,) (+)
+  , (,) Sub . (,) "-" . (,) 6 . (,) LeftAssoc . (,) (-)
+  , (,) Mul . (,) "*" . (,) 7 . (,) BothAssoc . (,) (*)
+  , (,) Div . (,) "/" . (,) 7 . (,) LeftAssoc . (,) (/)
+  , (,) Exp . (,) "^" . (,) 8 . (,) RightAssoc . (,) (.^.)
+  , (,) Jux . (,) "." . (,) 10 . (,) BothAssoc . (,) (*) ]
 
 --------------------------------------------------------------------------------
 
 -- Function enumeration
 data Function = Log   -- Logarithm
+              | Neg   -- Negate
+              | Rcp   -- Reciprocal
               | Abs   -- Absolute
               | Sgn   -- Sign
-              | Neg   -- Negate
               | Sin   -- Sine
               | Cos   -- Cosine
               | ASin  -- Inverse Sine
@@ -261,9 +265,10 @@ lookupFunction = fromJust . flip lookup functionTable
 functionTable :: [(Function, (Symbol, (Arity, (FunctionApplication, ()))))]
 functionTable = map ($ ())
   [ (,) Log . (,) "log" . (,) 2 . (,) (applyBinary logBase)
+  , (,) Neg . (,) "neg" . (,) 1 . (,) (applyUnary negate)
+  , (,) Rcp . (,) "rcp" . (,) 1 . (,) (applyUnary recip)
   , (,) Abs . (,) "abs" . (,) 1 . (,) (applyUnary abs)
   , (,) Sgn . (,) "sgn" . (,) 1 . (,) (applyUnary signum)
-  , (,) Neg . (,) "neg" . (,) 1 . (,) (applyUnary negate)
   , (,) Sin . (,) "sin" . (,) 1 . (,) (applyUnary sin)
   , (,) Cos . (,) "cos" . (,) 1 . (,) (applyUnary cos)
   , (,) ASin . (,) "asin" . (,) 1 . (,) (applyUnary asin)

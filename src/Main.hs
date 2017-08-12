@@ -4,10 +4,9 @@ import Data.Char (isSpace)
 import Data.List (intersperse)
 
 import Equation
-import Lexer
-import Parser
+import Lex
+import Parse
 import Show
-import Solver
 
 --------------------------------------------------------------------------------
 

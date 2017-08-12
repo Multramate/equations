@@ -1,4 +1,4 @@
-module Lexer where
+module Lex where
 
 import Control.Applicative ((<|>), empty)
 import Data.Char (isAlpha, isSpace)
@@ -14,20 +14,22 @@ import Equation
 lexEqn :: Input -> Maybe (Tokens, Tokens)
 lexEqn input = case lexExp input of
   Just (toks @ (_ : _), '=' : input') -> case lexExp input' of
-    Just (toks' @ (_ : _), []) -> Just (toks, toks')
+    Just (toks' @ (_ : _), []) -> return (toks, toks')
     _ -> Nothing
   _ -> Nothing
 
 -- Lexes an input string with an initial minus sign into a token list
 lexExp :: Input -> Maybe (Tokens, Input)
 lexExp input = case lexExp' input of
-  Just (Opr Sub : toks, input') -> Just (Num (Z (-1)) : Opr Jux : toks, input')
+  Just (Opr Sub : toks, input') -> return (toks', input')
+    where
+      toks' = Num (Z (-1)) : Opr Jux : toks
   exp -> exp
 
 -- Lexes an input string with an equals sign into a token list
 lexExp' :: Input -> Maybe (Tokens, Input)
 lexExp' input' @ (char : input)
-  | char == '=' = Just ([], input')
+  | char == '=' = return ([], input')
   | char == ',' = recurseLex Sep input
   | char == '(' = recurseLex Opn input
   | char == ')' = recurseLex Cls input
@@ -37,21 +39,21 @@ lexExp' input' @ (char : input)
     recurseLex = (. lexExp') . fmap . first . rewriteToks
     getMatch = foldr ((<|>) . ($ input')) empty
     matchList = [matchFun, matchOpr, matchNum, matchChr]
-lexExp' _ = Just ([], [])
+lexExp' _ = return ([], [])
 
 --------------------------------------------------------------------------------
 
--- Rewrites a tokens list for certain juxtaposed tokens
+-- Rewrites a token list for certain juxtaposed tokens
 rewriteToks :: Token -> Tokens -> Tokens
-rewriteToks tok toks' @ (Opr Sub : toks)
+rewriteToks tok (Opr Sub : toks)
   | any ($ tok) isNeg = tok : Num (Z (-1)) : Opr Jux : toks
   where
     isNeg = [isOperator, (== Sep), (== Opn)]
 rewriteToks tok toks @ (tok' : _)
-  | any ($ tok) isJuxLeft && any ($ tok') isJuxRight = tok : Opr Jux : toks
+  | any ($ tok) isLeftTerm && any ($ tok') isRightTerm = tok : Opr Mul : toks
   where
-    isJuxLeft = [isNumeric, isCharacter, (== Cls)]
-    isJuxRight = [isNumeric, isCharacter, isFunction, (== Opn)]
+    isLeftTerm = [isNumeric, isCharacter, (== Cls)]
+    isRightTerm = [isNumeric, isCharacter, isFunction, (== Opn)]
 rewriteToks tok toks = tok : toks
 
 -- Matches an input string with possible numerics
@@ -64,7 +66,7 @@ matchNum input = listToMaybe zList <|> listToMaybe qList
 -- Matches an input string with possible characters
 matchChr :: Input -> Maybe (Token, Input)
 matchChr (char : input)
-  | isAlpha char = Just (Chr char, input)
+  | isAlpha char = return (Chr char, input)
 matchChr _ = Nothing
 
 -- Matches an input string with possible operators
@@ -74,8 +76,8 @@ matchOpr = fmap (first Opr) . flip matchSymbol operatorTable
 -- Matches an input string with possible functions
 matchFun :: Input -> Maybe (Token, Input)
 matchFun input = case fmap (first Fun) (matchSymbol input functionTable) of
-  Just (tok, input' @ ('(' : _)) -> Just (tok, input')
-  Just (tok, input') -> Just (tok, '(' : ')' : input')
+  Just (tok, input' @ ('(' : _)) -> return (tok, input')
+  Just (tok, input') -> return (tok, '(' : ')' : input')
   _ -> Nothing
 
 --------------------------------------------------------------------------------
@@ -111,5 +113,5 @@ matchSymbol input = foldl match empty
 matchPattern :: String -> String -> Maybe String
 matchPattern (char : input) (char' : pattern)
   | char == char' = matchPattern input pattern
-matchPattern input [] = Just input
+matchPattern input [] = return input
 matchPattern _ _ = Nothing
