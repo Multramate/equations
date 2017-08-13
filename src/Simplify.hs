@@ -1,6 +1,7 @@
 module Simplify where
 
 import Control.Monad (liftM2)
+import Data.List (insert, sort)
 
 import Equation
 import Rewrite
@@ -13,42 +14,7 @@ simplify exp
   | return exp == exp' = exp'
   | otherwise = exp' >>= simplify
   where
-    exp' = rewrite exp >>= reassociate
-
---------------------------------------------------------------------------------
-
--- Reassociates an expression by rearranging brackets and rewriting
-reassociate :: Expression -> Maybe Expression
-reassociate = (=<<) reassociateLeft . (=<<) reassociateRight . return
-  where
-    reassociateLeft = (=<<) rewrite . bracketLeft
-    reassociateRight = (=<<) rewrite . bracketRight
-
--- Brackets associative operators to the left
-bracketLeft :: Expression -> Maybe Expression
-bracketLeft (Bin opr exp (Bin opr' exp' exp''))
-  | isAssoc = exp'''' >>= bracketLeft
-  where
-    isAssoc = opr == opr' && getAssociativity opr == BothAssoc
-    exp'''' = liftM2 (Bin opr) (exp''' >>= bracketLeft) (bracketLeft exp'')
-    exp''' = liftM2 (Bin opr') (bracketLeft exp) (bracketLeft exp')
-bracketLeft (Bin opr exp exp')
-  = liftM2 (Bin opr) (bracketLeft exp) (bracketLeft exp')
-bracketLeft exp = return exp
-
--- Brackets associative operators to the right
-bracketRight :: Expression -> Maybe Expression
-bracketRight (Bin opr (Bin opr' exp exp') exp'')
-  | isAssoc = exp'''' >>= bracketRight
-  where
-    isAssoc = opr == opr' && getAssociativity opr == BothAssoc
-    exp'''' = liftM2 (Bin opr) (bracketRight exp) (exp''' >>= bracketRight)
-    exp''' = liftM2 (Bin opr') (bracketRight exp') (bracketRight exp'')
-bracketRight (Bin opr exp exp') = liftM2 (Bin opr) exp'' exp'''
-  where
-    exp'' = bracketRight exp
-    exp''' = bracketRight exp'
-bracketRight exp = return exp
+    exp' = return exp >>= rewrite
 
 --------------------------------------------------------------------------------
 
@@ -87,6 +53,66 @@ evaluate exp = return exp
 
 --------------------------------------------------------------------------------
 
+-- Applies a list function to associative and commutative operators
+applyList :: Expression -> Expression
+applyList exp''' @ (Bin opr exp (Bin opr' exp' exp''))
+  | opr == opr' = case listFunction opr of
+  Just fun -> applyList . App fun . append . append' . append'' $ []
+    where
+      append = appendList list . App fun
+      append' = appendList list' . App fun
+      append'' = appendList list'' . App fun
+  _ -> if exp''' == exp'''' then exp''' else applyList exp''''
+  where
+    exp'''' = Bin opr list (Bin opr' list' list'')
+    list = applyList exp
+    list' = applyList exp'
+    list'' = applyList exp''
+applyList exp''' @ (Bin opr (Bin opr' exp exp') exp'')
+  | opr == opr' = case listFunction opr of
+  Just fun -> applyList . App fun . append . append' . append'' $ []
+    where
+      append = appendList list . App fun
+      append' = appendList list' . App fun
+      append'' = appendList list'' . App fun
+  _ -> if exp''' == exp'''' then exp''' else applyList exp''''
+  where
+    exp'''' = Bin opr (Bin opr' list list') list''
+    list = applyList exp
+    list' = applyList exp'
+    list'' = applyList exp''
+applyList exp'' @ (Bin opr exp exp')
+  | exp'' /= exp''' = applyList exp'''
+  where
+    exp''' = Bin opr (applyList exp) (applyList exp') 
+applyList exp = exp
+
+-- Appends two expressions into an expression list
+appendList :: Expression -> Expression -> [Expression]
+appendList (Bin opr exp exp') (Bin opr' exp'' exp''')
+  | opr == Add && opr' == Add || opr == Mul && opr' == Mul
+    = sort [exp, exp', exp'', exp''']
+appendList (Bin opr exp exp') (App fun exps)
+  | opr == Add && fun == Sum || opr == Mul && fun == Prd
+    = foldr insert exps [exp, exp']
+appendList (App fun exps) (Bin opr exp exp')
+  | fun == Sum && opr == Add || fun == Prd && opr == Mul
+    = foldr insert exps [exp, exp']
+appendList (App fun exps) (App fun' exps')
+  | fun == Sum && fun' == Sum || fun == Prd && fun' == Prd
+    = foldr insert exps exps'
+appendList exp (Bin opr exp' exp'')
+  | opr == Add || opr == Mul = sort [exp, exp', exp'']
+appendList exp (App fun exps)
+  | fun == Sum || fun == Prd = insert exp exps
+appendList (Bin opr exp exp') exp''
+  | opr == Add || opr == Mul = sort [exp, exp', exp'']
+appendList (App fun exps) exp
+  | fun == Sum || fun == Prd = insert exp exps
+appendList exp exp' = sort [exp, exp']
+
+--------------------------------------------------------------------------------
+
 -- Checks if an expression is a value
 isValue :: Expression -> Bool
 isValue (Val _) = True
@@ -96,3 +122,9 @@ isValue _ = False
 getNumeric :: Expression -> Maybe Numeric
 getNumeric (Val val) = return val
 getNumeric _ = Nothing
+
+-- Returns a list function if an operator is listable
+listFunction :: Operator -> Maybe Function
+listFunction Add = return Sum
+listFunction Mul = return Prd
+listFunction _ = Nothing

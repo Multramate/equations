@@ -29,14 +29,11 @@ analyse' = convertAST'
 simplify' :: Input -> Maybe Expression
 simplify' input = analyse' input >>= simplify
 
-reassociate' :: Input -> Maybe Expression
-reassociate' input = analyse' input >>= reassociate
-
-rewrite' :: Input -> Maybe Expression
-rewrite' input = analyse' input >>= rewrite
-
 evaluate' :: Input -> Maybe Expression
 evaluate' input = analyse' input >>= evaluate
+
+applyList' :: Input -> Maybe Expression
+applyList' input = fmap applyList (analyse' input)
 
 --------------------------------------------------------------------------------
 
@@ -53,14 +50,6 @@ simplifyTests = TestList
   , simplify' "log(x,x)^x^x" ~?= return 1
   , simplify' "---------(-x)" ~?= return (Con 'x')
   , simplify' "-1/-(-1/-x)" ~?= return (Con 'x')
-  , reassociate' "1+2+3+4+x" ~?= return (10 + Con 'x')
-  , reassociate' "x+1+2+3+4" ~?= return (Con 'x' + 10)
-  , reassociate' "1+2+3+4+x+4+3+2+1" ~?= return (10 + Con 'x' + 10)
-  , reassociate' "1+((2+((3+((4+(x+4))+3))+2))+1)" ~?= return (10 + Con 'x' + 10)
-  , rewrite' "x/x*1+2-3" ~?= return 0
-  , rewrite' "log(x,x)^x^x" ~?= return 1
-  , rewrite' "---------(-x)" ~?= return (-(-Con 'x'))
-  , rewrite' "-1/-(-1/-x)" ~?= return (-recip (-(-recip (-Con 'x'))))
   , evaluate' "1.2+3.4" ~?= return (Val (1.2 + 3.4))
   , evaluate' "1.2-3.4" ~?= return (Val (1.2 - 3.4))
   , evaluate' "1.2*3.4" ~?= return (Val (1.2 * 3.4))
@@ -106,11 +95,11 @@ simplifyTests = TestList
   , rewriteSub (Bin Sub 0 2.3) ~?= return (-2.3)
   , rewriteSub (Bin Sub 2.3 0) ~?= return 2.3
   , rewriteSub (Bin Sub 2.3 2.3) ~?= return 0
-  , rewriteSub (Bin Sub 1.2 3.4) ~?= return (Bin Sub 1.2 3.4)
+  , rewriteSub (Bin Sub 1.2 3.4) ~?= return (Bin Add 1.2 (negate 3.4))
   , rewriteSub (Bin Sub 0 (Var 'x')) ~?= return (-Var 'x')
   , rewriteSub (Bin Sub (Var 'x') 0) ~?= return (Var 'x')
   , rewriteSub (Bin Sub (Var 'x') (Var 'x')) ~?= return 0
-  , rewriteSub (Bin Sub (Var 'x') (Var 'y')) ~?= return (Bin Sub (Var 'x') (Var 'y'))
+  , rewriteSub (Bin Sub (Var 'x') (Var 'y')) ~?= return (Bin Add (Var 'x') (-Var 'y'))
   , rewriteMul (Bin Mul 0 0) ~?= return 0
   , rewriteMul (Bin Mul 0 2.3) ~?= return 0
   , rewriteMul (Bin Mul 2.3 0) ~?= return 0
@@ -148,7 +137,7 @@ simplifyTests = TestList
   , rewriteDiv (Bin Div 2.3 (Val (-1))) ~?= return (-2.3)
   , rewriteDiv (Bin Div (-2.3) 2.3) ~?= return (Val (-1))
   , rewriteDiv (Bin Div 2.3 (-2.3)) ~?= return (Val (-1))
-  , rewriteDiv (Bin Div 1.2 3.4) ~?= return (Bin Div 1.2 3.4)
+  , rewriteDiv (Bin Div 1.2 3.4) ~?= return (Bin Mul 1.2 (recip 3.4))
   , rewriteDiv (Bin Div 0 (Var 'x')) ~?= return 0
   , rewriteDiv (Bin Div (Var 'x') 0) ~?= Nothing
   , rewriteDiv (Bin Div 1 (Var 'x')) ~?= return (recip (Var 'x'))
@@ -158,7 +147,7 @@ simplifyTests = TestList
   , rewriteDiv (Bin Div (Var 'x') (Val (-1))) ~?= return (-Var 'x')
   , rewriteDiv (Bin Div (-Var 'x') (Var 'x')) ~?= return (Val (-1))
   , rewriteDiv (Bin Div (Var 'x') (-Var 'x')) ~?= return (Val (-1))
-  , rewriteDiv (Bin Div (Var 'x') (Var 'y')) ~?= return (Bin Div (Var 'x') (Var 'y'))
+  , rewriteDiv (Bin Div (Var 'x') (Var 'y')) ~?= return (Bin Mul (Var 'x') (recip (Var 'y')))
   , rewriteExp (Bin Exp 0 0) ~?= Nothing
   , rewriteExp (Bin Exp (Val (-2.3)) 0) ~?= Nothing
   , rewriteExp (Bin Exp 0 2.3) ~?= return 0
@@ -227,7 +216,35 @@ simplifyTests = TestList
   , rewriteLog (App Log [2, 2]) ~?= return 1
   , rewriteLog (App Log [2, 1]) ~?= return 0
   , rewriteLog (App Log [Var 'x', 1]) ~?= return 0
-  , rewriteLog (App Log [Var 'x', Var 'x']) ~?= return 1 ]
+  , rewriteLog (App Log [Var 'x', Var 'x']) ~?= return 1
+  , applyList' "1+2" ~?= return (1 + 2)
+  , applyList' "1+2+3" ~?= return (App Sum [1, 2, 3])
+  , applyList' "1+2+3+4" ~?= return (App Sum [1, 2, 3, 4])
+  , applyList' "1+2+3+4+5" ~?= return (App Sum [1, 2, 3, 4, 5])
+  , applyList' "1+((2+(3+4))+5)" ~?= return (App Sum [1, 2, 3, 4, 5])
+  , applyList' "1*2" ~?= return (1 * 2)
+  , applyList' "1*2*3" ~?= return (App Prd [1, 2, 3])
+  , applyList' "1*2*3*4" ~?= return (App Prd [1, 2, 3, 4])
+  , applyList' "1*2*3*4*5" ~?= return (App Prd [1, 2, 3, 4, 5])
+  , applyList' "1*((2*(3*4))*5)" ~?= return (App Prd [1, 2, 3, 4, 5])
+  , applyList' "1+2*3" ~?= return (1 + 2 * 3)
+  , applyList' "1*2+3" ~?= return (1 * 2 + 3)
+  , applyList' "1+2+3*4" ~?= return (App Sum [1, 2, 3 * 4])
+  , applyList' "1+2*3+4" ~?= return (App Sum [1, 4, 2 * 3])
+  , applyList' "1*2+3+4" ~?= return (App Sum [3, 4, 1 * 2])
+  , applyList' "1+2*3*4" ~?= return (1 + App Prd [2, 3, 4])
+  , applyList' "1*2+3*4" ~?= return (1 * 2 + 3 * 4)
+  , applyList' "1*2*3+4" ~?= return (App Prd [1, 2, 3] + 4)
+  , applyList' "1+2+3+4*5" ~?= return (App Sum [1, 2, 3, 4 * 5])
+  , applyList' "1+2+3*4+5" ~?= return (App Sum [1, 2, 5, 3 * 4])
+  , applyList' "1+2*3+4+5" ~?= return (App Sum [1, 4, 5, 2 * 3])
+  , applyList' "1*2+3+4+5" ~?= return (App Sum [3, 4, 5, 1 * 2])
+  , applyList' "1+2+3*4*5" ~?= return (App Sum [1, 2, App Prd [3, 4, 5]])
+  , applyList' "1+2*3+4*5" ~?= return (App Sum [1, 2 * 3, 4 * 5])
+  , applyList' "1*2+3+4*5" ~?= return (App Sum [3, 1 * 2, 4 * 5])
+  , applyList' "1+2*3*4+5" ~?= return (App Sum [1, 5, App Prd [2, 3, 4]])
+  , applyList' "1*2+3*4+5" ~?= return (App Sum [5, 1 * 2, 3 * 4])
+  , applyList' "1*2*3+4+5" ~?= return (App Sum [4, 5, App Prd [1, 2, 3]]) ]
 
 --------------------------------------------------------------------------------
 

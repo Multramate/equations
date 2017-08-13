@@ -12,10 +12,7 @@ type LHS = [Token]
 type RHS = [Token]
 type Symbol = String
 type Precedence = Int
-data Associativity = LeftAssoc
-                   | BothAssoc
-                   | RightAssoc
-                   deriving Eq
+type Associativity = Bool
 type Arity = Int
 type BinaryOperation = Numeric -> Numeric -> Numeric
 type FunctionApplication = [Numeric] -> Numeric
@@ -56,12 +53,12 @@ data Expression = Val Numeric                        -- Value
                 | Var Char                           -- Variable
                 | Bin Operator Expression Expression -- Binary Operation
                 | App Function [Expression]          -- Function Application
-                deriving (Eq, Show)
+                deriving (Eq, Ord, Show)
 
 -- Makes expression an instance of floating
 instance Floating Expression where
-  pi = Val (R pi)
-  exp = Bin Exp (Val (R (exp 1)))
+  pi = Val pi
+  exp = Bin Exp (Val (exp 1))
   log = App Log . return
   sin = App Sin . return
   cos = App Cos . return
@@ -88,14 +85,6 @@ instance Num Expression where
   fromInteger = Val . Z . fromIntegral
   negate = App Neg . return
 
--- Makes expression an instance of ord
-instance Ord Expression where
-  Val val <= Val val' = val <= val'
-  _ <= _ = False
-  _ < _ = False
-  _ >= _ = False
-  _ > _ = False
-
 --------------------------------------------------------------------------------
 
 -- Numeric data type
@@ -118,7 +107,7 @@ instance Eq Numeric where
 
 -- Makes numeric an instance of floating
 instance Floating Numeric where
-  pi = R pi
+  pi = pi
   exp = R . applyDouble exp
   log = R . applyDouble log
   sin = R . applyDouble sin
@@ -193,6 +182,10 @@ data Operator = Add -- Addition
               | Jux -- Juxtaposition
               deriving (Eq, Show)
 
+-- Makes operator an instance of ord
+instance Ord Operator where
+  compare _ _ = EQ
+
 -- Gets the symbol of an operator
 getOperatorSymbol :: Operator -> Symbol
 getOperatorSymbol = fst . lookupOperator
@@ -218,17 +211,19 @@ lookupOperator = fromJust . flip lookup operatorTable
 operatorTable :: [(Operator, (Symbol,
   (Precedence, (Associativity, (BinaryOperation, ())))))]
 operatorTable = map ($ ())
-  [ (,) Add . (,) "+" . (,) 6 . (,) BothAssoc . (,) (+)
-  , (,) Sub . (,) "-" . (,) 6 . (,) LeftAssoc . (,) (-)
-  , (,) Mul . (,) "*" . (,) 7 . (,) BothAssoc . (,) (*)
-  , (,) Div . (,) "/" . (,) 7 . (,) LeftAssoc . (,) (/)
-  , (,) Exp . (,) "^" . (,) 8 . (,) RightAssoc . (,) (.^.)
-  , (,) Jux . (,) "." . (,) 10 . (,) BothAssoc . (,) (*) ]
+  [ (,) Add . (,) "+" . (,) 6 . (,) True . (,) (+)
+  , (,) Sub . (,) "-" . (,) 6 . (,) True . (,) (-)
+  , (,) Mul . (,) "*" . (,) 7 . (,) True . (,) (*)
+  , (,) Div . (,) "/" . (,) 7 . (,) True . (,) (/)
+  , (,) Exp . (,) "^" . (,) 8 . (,) False . (,) (.^.)
+  , (,) Jux . (,) "." . (,) 10 . (,) True . (,) (*) ]
 
 --------------------------------------------------------------------------------
 
 -- Function enumeration
-data Function = Log   -- Logarithm
+data Function = Sum   -- Sum
+              | Prd   -- Product
+              | Log   -- Logarithm
               | Neg   -- Negate
               | Rcp   -- Reciprocal
               | Abs   -- Absolute
@@ -244,6 +239,10 @@ data Function = Log   -- Logarithm
               | ACosH -- Inverse Hyperbolic Cosine
               | ATanH -- Inverse Hyperbolic Tangent
               deriving (Eq, Show)
+
+-- Makes function an instance of ord
+instance Ord Function where
+  compare _ _ = EQ
 
 -- Gets the symbol of a function
 getFunctionSymbol :: Function -> Symbol
@@ -264,7 +263,9 @@ lookupFunction = fromJust . flip lookup functionTable
 -- A lookup table for functions
 functionTable :: [(Function, (Symbol, (Arity, (FunctionApplication, ()))))]
 functionTable = map ($ ())
-  [ (,) Log . (,) "log" . (,) 2 . (,) (applyBinary logBase)
+  [ (,) Sum . (,) "sum" . (,) 0 . (,) sum
+  , (,) Prd . (,) "prd" . (,) 0 . (,) product
+  , (,) Log . (,) "log" . (,) 2 . (,) (applyBinary logBase)
   , (,) Neg . (,) "neg" . (,) 1 . (,) (applyUnary negate)
   , (,) Rcp . (,) "rcp" . (,) 1 . (,) (applyUnary recip)
   , (,) Abs . (,) "abs" . (,) 1 . (,) (applyUnary abs)
@@ -313,6 +314,6 @@ val .^. val' = R (applyDouble (flip applyDouble val . flip (**)) val')
 
 -- Applies a double to double function onto a numeric
 applyDouble :: (Double -> Double) -> Numeric -> Double
-applyDouble function (Z z) = function (fromIntegral z)
-applyDouble function q @ (Q _ _) = function (fromRational (fromQ q))
-applyDouble function (R r) = function r
+applyDouble fun (Z z) = fun (fromIntegral z)
+applyDouble fun q @ (Q _ _) = fun (fromRational (fromQ q))
+applyDouble fun (R r) = fun r

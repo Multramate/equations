@@ -55,12 +55,11 @@ shuntingYard queue stack _ = case stack of
 
 -- Checks if an operator does not precede another operator
 notPrecedes :: Operator -> Operator -> Bool
-notPrecedes opr opr' = precedence < precedence' || precedence == precedence'
-  && (associativity == LeftAssoc || associativity == BothAssoc)
+notPrecedes opr opr' = less < more || less == more && left
   where
-    precedence = getPrecedence opr
-    precedence' = getPrecedence opr'
-    associativity = getAssociativity opr
+    less = getPrecedence opr
+    more = getPrecedence opr'
+    left = getAssociativity opr
 
 --------------------------------------------------------------------------------
 
