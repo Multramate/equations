@@ -7,7 +7,7 @@ import Equation
 --------------------------------------------------------------------------------
 
 -- Gets the rewrite of a binary operation
-getRewriteOperation :: Operator -> (Expression -> Maybe Expression)
+getRewriteOperation :: Operator -> Expression -> Maybe Expression
 getRewriteOperation = (.) fromJust . flip lookup $
   [ (Add, rewriteAdd)
   , (Sub, rewriteSub)
@@ -17,7 +17,7 @@ getRewriteOperation = (.) fromJust . flip lookup $
   , (Jux, rewriteMul) ]
 
 -- Gets the rewrite of a function application
-getRewriteFunction :: Function -> (Expression -> Maybe Expression)
+getRewriteFunction :: Function -> Expression -> Maybe Expression
 getRewriteFunction = (.) fromJust . flip lookup $
   [ (Sum, rewriteSum)
   , (Prd, rewritePrd)

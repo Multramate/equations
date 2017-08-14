@@ -1,7 +1,7 @@
 module Simplify where
 
 import Control.Monad (liftM2)
-import Data.List (insert, sort)
+import Data.List (insert)
 
 import Equation
 import Rewrite
@@ -53,63 +53,33 @@ evaluate exp = return exp
 
 --------------------------------------------------------------------------------
 
--- Applies a list function to associative and commutative operators
-applyList :: Expression -> Expression
-applyList exp''' @ (Bin opr exp (Bin opr' exp' exp''))
-  | opr == opr' = case listFunction opr of
-  Just fun -> applyList . App fun . append . append' . append'' $ []
-    where
-      append = appendList list . App fun
-      append' = appendList list' . App fun
-      append'' = appendList list'' . App fun
-  _ -> if exp''' == exp'''' then exp''' else applyList exp''''
+-- Converts expressions with listable operators into a function list
+convertList :: Expression -> Expression
+convertList exp''' @ (Bin opr exp (Bin opr' exp' exp''))
+  | areListable opr opr' = appendList (getListFunction opr) exp exp' exp''
+convertList exp''' @ (Bin opr (Bin opr' exp exp') exp'')
+  | areListable opr opr' = appendList (getListFunction opr) exp exp' exp''
+convertList exp'' @ (Bin opr exp exp')
+  | exp'' /= exp''' = convertList exp'''
   where
-    exp'''' = Bin opr list (Bin opr' list' list'')
-    list = applyList exp
-    list' = applyList exp'
-    list'' = applyList exp''
-applyList exp''' @ (Bin opr (Bin opr' exp exp') exp'')
-  | opr == opr' = case listFunction opr of
-  Just fun -> applyList . App fun . append . append' . append'' $ []
-    where
-      append = appendList list . App fun
-      append' = appendList list' . App fun
-      append'' = appendList list'' . App fun
-  _ -> if exp''' == exp'''' then exp''' else applyList exp''''
-  where
-    exp'''' = Bin opr (Bin opr' list list') list''
-    list = applyList exp
-    list' = applyList exp'
-    list'' = applyList exp''
-applyList exp'' @ (Bin opr exp exp')
-  | exp'' /= exp''' = applyList exp'''
-  where
-    exp''' = Bin opr (applyList exp) (applyList exp') 
-applyList exp = exp
+    exp''' = Bin opr (convertList exp) (convertList exp')
+convertList exp = exp
 
--- Appends two expressions into an expression list
-appendList :: Expression -> Expression -> [Expression]
-appendList (Bin opr exp exp') (Bin opr' exp'' exp''')
-  | opr == Add && opr' == Add || opr == Mul && opr' == Mul
-    = sort [exp, exp', exp'', exp''']
-appendList (Bin opr exp exp') (App fun exps)
-  | opr == Add && fun == Sum || opr == Mul && fun == Prd
-    = foldr insert exps [exp, exp']
-appendList (App fun exps) (Bin opr exp exp')
-  | fun == Sum && opr == Add || fun == Prd && opr == Mul
-    = foldr insert exps [exp, exp']
-appendList (App fun exps) (App fun' exps')
-  | fun == Sum && fun' == Sum || fun == Prd && fun' == Prd
-    = foldr insert exps exps'
-appendList exp (Bin opr exp' exp'')
-  | opr == Add || opr == Mul = sort [exp, exp', exp'']
-appendList exp (App fun exps)
-  | fun == Sum || fun == Prd = insert exp exps
-appendList (Bin opr exp exp') exp''
-  | opr == Add || opr == Mul = sort [exp, exp', exp'']
-appendList (App fun exps) exp
-  | fun == Sum || fun == Prd = insert exp exps
-appendList exp exp' = sort [exp, exp']
+-- Appends three expressions into a function list
+appendList :: Function -> Expression -> Expression -> Expression -> Expression
+appendList fun exp exp' exp'' = convertList exp'''
+  where
+    App _ list = insertList fun [] (convertList exp)
+    App _ list' = insertList fun list (convertList exp')
+    exp''' = insertList fun list' (convertList exp'')
+
+-- Inserts an expression into a function list
+insertList :: Function -> [Expression] -> Expression -> Expression
+insertList Sum exps (Bin Add exp exp') = App Sum (foldr insert exps [exp, exp'])
+insertList Prd exps (Bin Mul exp exp') = App Prd (foldr insert exps [exp, exp'])
+insertList Sum exps (App Sum exps') = App Sum (foldr insert exps exps')
+insertList Prd exps (App Prd exps') = App Prd (foldr insert exps exps')
+insertList fun exps exp = App fun (insert exp exps)
 
 --------------------------------------------------------------------------------
 
@@ -123,8 +93,10 @@ getNumeric :: Expression -> Maybe Numeric
 getNumeric (Val val) = return val
 getNumeric _ = Nothing
 
--- Returns a list function if an operator is listable
-listFunction :: Operator -> Maybe Function
-listFunction Add = return Sum
-listFunction Mul = return Prd
-listFunction _ = Nothing
+-- Checks if two operators are equal and listable
+areListable :: Operator -> Operator -> Bool
+areListable opr opr' = opr == Add && opr' == Add || opr == Mul && opr' == Mul
+
+-- Gets the list function of an operator
+getListFunction :: Operator -> Function
+getListFunction opr = if opr == Mul then Prd else Sum
