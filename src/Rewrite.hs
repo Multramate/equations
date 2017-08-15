@@ -96,11 +96,15 @@ rewriteExp exp = return exp
 
 -- Rewrites a sum function
 rewriteSum :: Expression -> Maybe Expression
+rewriteSum (App _ []) = return 0
+rewriteSum (App _ [exp]) = return exp
 rewriteSum (App _ [exp, exp']) = return $ Bin Add exp exp'
 rewriteSum exp = return exp
 
 -- Rewrites a product function
 rewritePrd :: Expression -> Maybe Expression
+rewritePrd (App _ []) = return 1
+rewritePrd (App _ [exp]) = return exp
 rewritePrd (App _ [exp, exp']) = return $ Bin Mul exp exp'
 rewritePrd exp = return exp
 
