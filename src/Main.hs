@@ -22,15 +22,15 @@ main = do
   putStrLn $ "\n*Lexing and parsing input with environment ..."
   let env = if null vars then "x" else vars
   case analyse env input of
-    Just eqn @ (Eqn lhs rhs) -> do
+    Right eqn @ (Eqn lhs rhs) -> do
       putStrLn $ "\n*... equation analysis success:"
       putStrLn $ "\tEquation is " ++ showEqn eqn
       putStrLn $ "\tVariables are " ++ intersperse ' ' env
       putStrLn $ "\n*Proceed to solving ..."
       putStrLn $ "\n*... solution success:"
       putStrLn $ "\t" ++ showEqn (Eqn lhs rhs)
-    _ -> putStrLn $ "\n*... equation analysis failure: lexical and parse error"
+    Left err -> putStrLn $ "\n*... equation analysis failure: " ++ err
 
 -- Analyses an input
-analyse :: Environment -> Input -> Maybe Equation
-analyse env input = parseEqn env =<< lexEqn input
+analyse :: Environment -> Input -> Either String Equation
+analyse env input = lexEqn input >>= parseEqn env

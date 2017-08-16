@@ -2,7 +2,7 @@ module Lex where
 
 import Control.Applicative ((<|>), empty)
 import Data.Char (isAlpha, isSpace)
-import Data.Maybe (fromMaybe, listToMaybe)
+import Data.Maybe (listToMaybe)
 import Data.Tuple.Extra (first)
 import Numeric (readFloat)
 
@@ -11,33 +11,37 @@ import Equation
 --------------------------------------------------------------------------------
 
 -- Lexes an input string into a tuple of token lists
-lexEqn :: Input -> Maybe (Tokens, Tokens)
+lexEqn :: Input -> Either String (Tokens, Tokens)
 lexEqn input = case lexExp input of
-  Just (toks @ (_ : _), '=' : input') -> case lexExp input' of
-    Just (toks' @ (_ : _), []) -> return (toks, toks')
-    _ -> Nothing
-  _ -> Nothing
+  Right (toks @ (_ : _), '=' : input') -> case lexExp input' of
+    Right (toks' @ (_ : _), []) -> return (toks, toks')
+    Left err -> Left err
+    err -> Left "Lexical error: error in RHS"
+  Left err -> Left err
+  err -> Left "Lexical error: error in LHS"
 
 -- Lexes an input string with an initial minus sign into a token list
-lexExp :: Input -> Maybe (Tokens, Input)
+lexExp :: Input -> Either String (Tokens, Input)
 lexExp input = case lexExp' input of
-  Just (Opr Sub : toks, input') -> return (toks', input')
+  Right (Opr Sub : toks, input') -> return (toks', input')
     where
       toks' = Num (Z (-1)) : Opr Jux : toks
   exp -> exp
 
 -- Lexes an input string with an equals sign into a token list
-lexExp' :: Input -> Maybe (Tokens, Input)
+lexExp' :: Input -> Either String (Tokens, Input)
 lexExp' input' @ (char : input)
   | char == '=' = return ([], input')
   | char == ',' = recurseLex Sep input
   | char == '(' = recurseLex Opn input
   | char == ')' = recurseLex Cls input
   | isSpace char = lexExp' input
-  | otherwise = uncurry recurseLex =<< getMatch matchList
+  | otherwise = getMatch >>= uncurry recurseLex
   where
     recurseLex = (. lexExp') . fmap . first . rewriteToks
-    getMatch = foldr ((<|>) . ($ input')) empty
+    getMatch = case foldr ((<|>) . ($ input')) empty matchList of
+      Just match -> return match
+      _ -> Left $ "Lexical error: unknown character " ++ [char]
     matchList = [matchFun, matchOpr, matchNum, matchChr]
 lexExp' _ = return ([], [])
 
